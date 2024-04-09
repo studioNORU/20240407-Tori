@@ -1,31 +1,29 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using tori.Models;
 
-namespace tori.Controllers;
+namespace Tori.Controllers;
 
 public class HomeController : Controller
 {
-    private readonly ILogger<HomeController> _logger;
+    private readonly ILogger<HomeController> logger;
 
     public HomeController(ILogger<HomeController> logger)
     {
-        _logger = logger;
+        this.logger = logger;
     }
 
     public IActionResult Index()
     {
-        return View();
-    }
-
-    public IActionResult Privacy()
-    {
-        return View();
+        return this.Json(new
+        {
+            test = "Test",
+        });
     }
 
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {
-        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        this.logger.Log(LogLevel.Error, "REQ : {reqId}", Activity.Current?.Id ?? this.HttpContext.TraceIdentifier);
+        return this.Problem();
     }
 }
