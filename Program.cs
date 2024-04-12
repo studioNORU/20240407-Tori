@@ -14,7 +14,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Version = "v1",
         Title = "토리를 구해줘",
-        Description = "'토리를 구해줘' 게임에 대한 API 문서입니다."
+        Description = "'토리를 구해줘' 게임에 대한 API 문서입니다. (본 API에서의 시간 정보는 모두 UTC를 기준으로 하고 있습니다.)"
     });
     
     options.EnableAnnotations();
