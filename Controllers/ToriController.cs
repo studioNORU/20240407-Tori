@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
-using tori.Core;
+using Tori.Controllers.Data;
 
 namespace Tori.Controllers;
 
@@ -18,7 +18,7 @@ public class ToriController : Controller
     [HttpPost]
     [Route("loading")]
     [SwaggerOperation("로딩", "게임 진입에 앞서 필요한 정보를 로딩합니다.")]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "올바르지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "이미 해당 유저가 게임에 참여 중이기 때문에 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(LoadingResponse))]
     public async Task<IActionResult> Loading(
@@ -38,21 +38,93 @@ public class ToriController : Controller
         });
     }
 
-    private record LoadingResponse
+    [HttpPost]
+    [Route("gamestart")]
+    [SwaggerOperation("게임 시작")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GameStart(
+        [FromForm, SwaggerSchema("게임 토큰")] string token)
     {
-        [SwaggerSchema("API 사용에 필요한 토큰입니다. 사용자를 구분하기 위한 값입니다.", Nullable = false)]
-        public string Token { get; init; } = default!;
+        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
         
-        [SwaggerSchema("게임에 관련된 상수들입니다.", Nullable = false)]
-        public Dictionary<string, int> Constants { get; init; } = default!;
+        return this.Json(new
+        {
+            TimestampUtc = DateTime.UtcNow.Ticks,
+        });
+    }
+    
+    [HttpPost]
+    [Route("gameend")]
+    [SwaggerOperation("게임 종료")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
+    [SwaggerResponse(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GameEnd(
+        [FromForm, SwaggerSchema("게임 토큰")] string token,
+        [FromForm, SwaggerSchema("호스트 시간 (점수)")] int hostTime,
+        [FromForm, SwaggerSchema("아이템 사용 횟수")] int itemCount)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
         
-        [SwaggerSchema("플레이어가 속한 스테이지의 ID입니다.", Nullable = false)]
-        public string StageId { get; init; } = default!;
+        return this.Json(new
+        {
+            GameReward = new
+            {
+                RewardId = "TEST",
+                RewardImage = "https://placehold.jp/150x150.png"
+            },
+            TimestampUtc = DateTime.UtcNow.Ticks,
+        });
+    }
+    
+    [HttpPost]
+    [Route("gamequit")]
+    [SwaggerOperation("게임 포기")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GameQuit(
+        [FromForm, SwaggerSchema("게임 토큰")] string token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
         
-        [SwaggerSchema("게임 시작 시간에 대한 C# DateTime.Ticks입니다.", Nullable = false)]
-        public long GameStartUtc { get; init; }
+        return this.Ok();
+    }
+    
+    [HttpPost]
+    [Route("ranking")]
+    [SwaggerOperation("게임 랭킹 정보 갱신")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
+    [SwaggerResponse(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Ranking(
+        [FromForm, SwaggerSchema("게임 토큰")] string token,
+        [FromForm, SwaggerSchema("호스트 시간 (점수)")] int hostTime,
+        [FromForm, SwaggerSchema("아이템 사용 횟수")] int itemCount)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
         
-        [SwaggerSchema("게임 종료 시간에 대한 C# DateTime.Ticks입니다.", Nullable = false)]
-        public long GameEndUtc { get; init; }
+        return this.Json(new
+        {
+            Timestamp = DateTime.UtcNow.Ticks,
+        });
+    }
+    
+    [HttpGet]
+    [Route("result")]
+    [SwaggerOperation("게임 최종 랭킹 결과 조회")]
+    [SwaggerResponse(StatusCodes.Status102Processing, "아직 계산이 완료되지 않았습니다. 다시 시도해주세요.")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Result(
+        [FromForm, SwaggerSchema("게임 토큰")] string token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
+        
+        return this.Json(new
+        {
+            Timestamp = DateTime.UtcNow.Ticks,
+        });
     }
 }
