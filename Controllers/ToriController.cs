@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using Tori.Controllers.Data;
+using Tori.Controllers.Requests;
 using tori.Controllers.Responses;
 
 namespace Tori.Controllers;
@@ -23,11 +24,10 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status409Conflict, "이미 해당 유저가 게임에 참여 중이기 때문에 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(LoadingResponse))]
     public async Task<IActionResult> Loading(
-        [FromForm, SwaggerSchema("플레이어 ID")] string userId,
-        [FromForm, SwaggerSchema("플레이어 닉네임")] string userNickname)
+        [FromBody] LoadingBody req)
     {
-        if (string.IsNullOrWhiteSpace(userId)) return this.BadRequest();
-        if (string.IsNullOrWhiteSpace(userNickname)) return this.BadRequest();
+        if (string.IsNullOrWhiteSpace(req.UserId)) return this.BadRequest();
+        if (string.IsNullOrWhiteSpace(req.UserNickname)) return this.BadRequest();
 
         return this.Json(new LoadingResponse
         {
@@ -46,9 +46,9 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다. loading API가 먼저 수행되어야 합니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameStartResponse))]
     public async Task<IActionResult> GameStart(
-        [FromForm, SwaggerSchema("게임 토큰")] string token)
+        [FromBody] AuthBody req)
     {
-        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
+        if (string.IsNullOrWhiteSpace(req.Token)) return this.Unauthorized();
         
         return this.Json(new GameStartResponse
         {
@@ -65,11 +65,9 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameEndResponse))]
     public async Task<IActionResult> GameEnd(
-        [FromForm, SwaggerSchema("게임 토큰")] string token,
-        [FromForm, SwaggerSchema("호스트 시간 (점수)")] int hostTime,
-        [FromForm, SwaggerSchema("아이템 사용 횟수")] int itemCount)
+        [FromBody] PlayInfoBody req)
     {
-        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
+        if (string.IsNullOrWhiteSpace(req.Token)) return this.Unauthorized();
         
         return this.Json(new GameEndResponse()
         {
@@ -89,9 +87,9 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> GameQuit(
-        [FromForm, SwaggerSchema("게임 토큰")] string token)
+        [FromBody] AuthBody body)
     {
-        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
+        if (string.IsNullOrWhiteSpace(body.Token)) return this.Unauthorized();
         
         return this.Ok();
     }
@@ -104,11 +102,9 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
     public async Task<IActionResult> Ranking(
-        [FromForm, SwaggerSchema("게임 토큰")] string token,
-        [FromForm, SwaggerSchema("호스트 시간 (점수)")] int hostTime,
-        [FromForm, SwaggerSchema("아이템 사용 횟수")] int itemCount)
+        [FromBody] PlayInfoBody body)
     {
-        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
+        if (string.IsNullOrWhiteSpace(body.Token)) return this.Unauthorized();
         
         return this.Json(new RankingResponse
         {
@@ -132,9 +128,9 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
     public async Task<IActionResult> Result(
-        [FromForm, SwaggerSchema("게임 토큰")] string token)
+        [FromBody] AuthBody req)
     {
-        if (string.IsNullOrWhiteSpace(token)) return this.Unauthorized();
+        if (string.IsNullOrWhiteSpace(req.Token)) return this.Unauthorized();
         
         return this.Json(new RankingResponse
         {
