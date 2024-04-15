@@ -7,6 +7,8 @@ public class SessionUser
 
     public uint ItemUsages { get; private set; }
     public ulong HostTime { get; private set; }
+    public bool HasQuit { get; private set; }
+    public bool IsPlaying { get; private set; }
 
     public SessionUser(UserIdentifier identifier)
     {
