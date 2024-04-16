@@ -1,9 +1,20 @@
+using Microsoft.AspNetCore.Mvc.Formatters;
+using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers(config =>
+{
+    foreach (var formatter in config.InputFormatters)
+    {
+        if (formatter is SystemTextJsonInputFormatter jsonInputFormatter)
+        {
+            jsonInputFormatter.SupportedMediaTypes.Add(MediaTypeHeaderValue.Parse("text/plain"));
+        }
+    }
+});
 builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
