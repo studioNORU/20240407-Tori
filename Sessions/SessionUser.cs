@@ -7,6 +7,7 @@ public class SessionUser
 
     public uint ItemUsages { get; private set; }
     public ulong HostTime { get; private set; }
+    public GameSession? PlaySession { get; private set; }
     public bool HasQuit { get; private set; }
     public bool IsPlaying { get; private set; }
 
@@ -15,6 +16,12 @@ public class SessionUser
         this.Identifier = identifier;
         this.ItemUsages = 0U;
         this.HostTime = 0UL;
+    }
+
+    public void SetSession(GameSession? session)
+    {
+        this.IsPlaying = session != null;
+        this.PlaySession = session;
     }
 
     public bool IsSame(SessionUser user)

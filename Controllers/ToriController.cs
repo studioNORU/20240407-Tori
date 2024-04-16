@@ -49,8 +49,8 @@ public class ToriController : Controller
                 Token = session.SessionId + req.UserId,
                 Constants = new(),
                 StageId = session.StageId,
-                GameStartUtc = DateTime.UtcNow.Ticks,
-                GameEndUtc = DateTime.UtcNow.Ticks,
+                GameStartUtc = session.GameStartAt.Ticks,
+                GameEndUtc = session.GameEndAt.Ticks,
                 CurrentTick = DateTime.UtcNow.Ticks,
             });
         }
@@ -105,7 +105,7 @@ public class ToriController : Controller
     
     [HttpPost]
     [Route("gamequit")]
-    [SwaggerOperation("게임 포기", "(WIP)")]
+    [SwaggerOperation("게임 포기", "테스트를 위해 토큰 대신 userId를 입력해 게임을 포기시킵니다. (WIP)")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK)]
@@ -113,6 +113,9 @@ public class ToriController : Controller
         [FromBody] AuthBody body)
     {
         if (string.IsNullOrWhiteSpace(body.Token)) return this.Unauthorized();
+        
+        //TODO: 게임을 종료시킬 수단이 먼저 있어야 해서 임시로 여기에 추가
+        if (!SessionManager.I.TryQuitUser(body.Token, out _)) return this.Conflict();
         
         return this.Ok();
     }

@@ -11,15 +11,6 @@ public class SessionManager
     private uint nextSessionId;
     private readonly Dictionary<string, GameSession> sessions = new();
 
-    private GameSession CreateSession()
-    {
-        var sessionId = $"s{this.nextSessionId++}";
-        var session = new GameSession(sessionId, sessionId);
-        session.SetActive();
-        this.sessions.Add(sessionId, session);
-        return session;
-    }
-
     private GameSession GetActiveSession()
     {
         lock (this)
@@ -34,7 +25,16 @@ public class SessionManager
                 return session;
             }
 
-            return this.CreateSession();
+            return CreateSession();
+        }
+        
+        GameSession CreateSession()
+        {
+            var sessionId = $"s{this.nextSessionId++}";
+            var session = new GameSession(sessionId, sessionId);
+            session.SetActive();
+            this.sessions.Add(sessionId, session);
+            return session;
         }
     }
 
@@ -42,5 +42,21 @@ public class SessionManager
     {
         session = this.GetActiveSession();
         return session.JoinUser(user);
+    }
+    
+    //HACK: 임시로 게임 포기를 구현하기 위한 함수
+    public bool TryQuitUser(string userId, out SessionUser user)
+    {
+        lock (this)
+        {
+            foreach (var session in this.sessions.Values)
+            {
+                if (session.TryQuitUser(userId, out user))
+                    return true;
+            }
+
+            user = default!;
+            return false;
+        }
     }
 }
