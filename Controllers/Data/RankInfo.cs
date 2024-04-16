@@ -16,7 +16,4 @@ public record RankInfo
     
     [SwaggerSchema("호스트 시간 (점수)", Nullable = false)]
     public int HostTime { get; init; }
-    
-    [SwaggerSchema("아이템 사용 횟수", Nullable = false)]
-    public int ItemCount { get; init; }
 }
