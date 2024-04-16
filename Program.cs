@@ -33,7 +33,9 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+#if RELEASE && !DEV
 if (app.Environment.IsDevelopment())
+#endif
 {
     app.UseSwagger();
     app.UseSwaggerUI();

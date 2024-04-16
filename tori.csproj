@@ -4,6 +4,13 @@
         <TargetFramework>net8.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <Configurations>Debug;Release;Dev</Configurations>
+        <Platforms>AnyCPU</Platforms>
+    </PropertyGroup>
+
+    <PropertyGroup Condition=" '$(Configuration)' == 'Dev' ">
+      <DefineConstants>TRACE;RELEASE</DefineConstants>
+      <Optimize>true</Optimize>
     </PropertyGroup>
 
     <ItemGroup>
