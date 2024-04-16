@@ -17,19 +17,21 @@ public class SessionUser
         this.HostTime = 0UL;
     }
 
+    public bool IsSame(SessionUser user)
+        => this.IsSame(user.Identifier);
+
+    public bool IsSame(UserIdentifier user)
+        => this.Identifier.Id == user.Id;
+
     public override bool Equals(object? obj) =>
         obj switch
         {
-            SessionUser user => this.Identifier == user.Identifier,
-            UserIdentifier identifier => this.Identifier == identifier,
+            SessionUser user => this.Identifier.Id == user.Identifier.Id,
+            UserIdentifier identifier => this.Identifier.Id == identifier.Id,
             _ => false
         };
 
-    public override int GetHashCode() => this.Identifier.GetHashCode();
+    public override int GetHashCode() => this.Identifier.Id.GetHashCode();
 }
 
-public record UserIdentifier
-{
-    public string PlayerId { get; init; }
-    public string Nickname { get; init; }
-}
+public record UserIdentifier(string Id, string Nickname);

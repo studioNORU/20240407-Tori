@@ -17,6 +17,25 @@ public class GameSession
 
     public IEnumerable<string> GetNicknames() => this.users.Select(user => user.Identifier.Nickname);
 
+    public GameSession(string sessionId, string stageId)
+    {
+        this.SessionId = sessionId;
+        this.StageId = stageId;
+        //TODO: 실제 설정을 참조하도록 해야함
+        this.maxUserLimits = 50;
+    }
+
+    public void SetActive()
+    {
+        if (this.users.Count != 0) throw new InvalidOperationException();
+        
+        var now = DateTime.UtcNow;
+        this.CreatedAt = now;
+        //TODO: 실제 설정을 참조하도록 해야함
+        this.GameStartAt = now.AddMinutes(1);
+        this.GameEndAt = now.AddMinutes(6);
+    }
+
     public bool CanAcceptUser()
     {
         var now = DateTime.UtcNow;
@@ -30,10 +49,25 @@ public class GameSession
         return this.users.Count < this.maxUserLimits;
     }
 
+    public bool IsReusable()
+    {
+        if (this.users.Count != 0) return false;
+
+        var now = DateTime.UtcNow;
+        
+        // 아직 생성 처리가 되지 않은 방은 초기화해서 재사용 가능
+        if (now < this.CreatedAt) return true;
+        // 게임이 종료된 방은 초기화해서 재사용 가능
+        if (this.GameEndAt <= now) return true;
+        
+        // 게임이 시작되었거나 시작 준비 중인 방은 초기화 불가
+        return false;
+    }
+
     public ResultCode JoinUser(UserIdentifier identifier)
     {
         if (!this.CanAcceptUser()) return ResultCode.UnhandledError;
-        if (this.users.Any(u => u.Identifier == identifier)) return ResultCode.AlreadyJoined;
+        if (this.users.Any(u => u.IsSame(identifier))) return ResultCode.AlreadyJoined;
 
         var user = new SessionUser(identifier);
         this.users.Add(user);
