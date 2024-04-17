@@ -43,6 +43,18 @@ public class SessionManager
         session = this.GetActiveSession();
         return session.JoinUser(user);
     }
+
+    public ResultCode TryGetUser(TokenData tokenData, out SessionUser user)
+    {
+        lock (this)
+        {
+            if (this.sessions.TryGetValue(tokenData.SessionId, out var session))
+                return session.TryGetUser(tokenData.User, out user);
+            
+            user = default!;
+            return ResultCode.SessionNotFound;
+        }
+    }
     
     //HACK: 임시로 게임 포기를 구현하기 위한 함수
     public bool TryQuitUser(string userId, out SessionUser user)

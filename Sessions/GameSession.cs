@@ -114,6 +114,27 @@ public class GameSession
             if (lockTaken) this.spinLock.Exit();
         }
     }
+
+    public ResultCode TryGetUser(UserIdentifier identifier, out SessionUser user)
+    {
+        user = default!;
+        
+        var lockTaken = false;
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+
+            var found = this.users.FirstOrDefault(u => u.IsSame(identifier));
+            if (found == null) return ResultCode.NotJoinedUser;
+
+            user = found;
+            return ResultCode.Ok;
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
+    }
     
     //HACK: 임시로 게임 포기를 구현하기 위한 함수
     public bool TryQuitUser(string userId, out SessionUser user)

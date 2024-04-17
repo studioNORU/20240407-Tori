@@ -46,7 +46,7 @@ public class ToriController : Controller
             
             return this.Json(new LoadingResponse
             {
-                Token = session.SessionId + req.UserId,
+                Token = JwtToken.ToToken(req.UserId, req.UserNickname, session.SessionId),
                 Constants = new(),
                 StageId = session.StageId,
                 GameStartUtc = session.GameStartAt.Ticks,
@@ -62,6 +62,18 @@ public class ToriController : Controller
         }
     }
 
+    private static async Task<(ResultCode, SessionUser?)> ValidateToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return (ResultCode.InvalidParameter, null);
+        
+        var (isValid, data) = await JwtToken.Parse(token);
+        if (!isValid || string.IsNullOrWhiteSpace(data.User.Id)) return (ResultCode.InvalidParameter, null);
+        if (string.IsNullOrWhiteSpace(data.SessionId)) return (ResultCode.InvalidParameter, null);
+
+        var result = SessionManager.I.TryGetUser(data, out var user);
+        return (result, user);
+    }
+
     [HttpPost]
     [Route("gamestart")]
     [SwaggerOperation("게임 시작", "(WIP)")]
@@ -71,11 +83,27 @@ public class ToriController : Controller
     public async Task<IActionResult> GameStart(
         [FromBody] AuthBody req)
     {
-        if (string.IsNullOrWhiteSpace(req.Token)) return this.Unauthorized();
+        var (resultCode, user) = await ValidateToken(req.Token);
+
+        switch (resultCode)
+        {
+            case ResultCode.Ok:
+                break;
+            
+            case ResultCode.InvalidParameter:
+                return this.Unauthorized();
+            case ResultCode.SessionNotFound:
+                return this.Unauthorized();
+            case ResultCode.NotJoinedUser:
+                return this.Conflict();
+            case ResultCode.UnhandledError:
+            default:
+                return this.Problem(resultCode.ToString());
+        }
         
         return this.Json(new GameStartResponse
         {
-            PlayerNicknames = new[] { "nickname1", "nickname2", "nickname3" },
+            PlayerNicknames = user!.PlaySession!.GetNicknames().ToArray(),
             CurrentTick = DateTime.UtcNow.Ticks,
         });
     }
