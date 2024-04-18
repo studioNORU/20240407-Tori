@@ -53,14 +53,48 @@ public class SessionManager
         }
     }
 
-    public ResultCode TryJoinUser(UserIdentifier user, out GameSession session)
+    /// <summary>
+    /// 세션에 새 유저를 입장시킵니다
+    /// </summary>
+    /// <param name="identifier">입장하는 유저의 식별 정보</param>
+    /// <param name="session">유저가 입장한 세션</param>
+    public ResultCode TryJoin(UserIdentifier identifier, out GameSession session)
     {
         session = this.GetActiveSession();
-        return session.JoinUser(user);
+        return session.JoinUser(identifier);
+    }
+    
+    /// <summary>
+    /// 세션에서 유저를 떠나보냅니다
+    /// </summary>
+    /// <param name="user">떠날 유저</param>
+    /// <param name="isQuit">게임이 종료된 것이 아닌 포기일 때 true</param>
+    public ResultCode TryLeave(SessionUser user, bool isQuit)
+    {
+        var lockTaken = false;
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+
+            if (user.PlaySession == null || !this.sessions.ContainsValue(user.PlaySession))
+                return ResultCode.SessionNotFound;
+
+            return user.PlaySession.LeaveUser(user, isQuit);
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
     }
 
+    /// <summary>
+    /// 토큰 정보로 유저를 찾습니다
+    /// </summary>
+    /// <param name="tokenData">토큰 정보</param>
+    /// <param name="user">찾은 유저</param>
     public ResultCode TryGetUser(TokenData tokenData, out SessionUser user)
     {
+        user = default!;
         var lockTaken = false;
         try
         {
@@ -69,31 +103,7 @@ public class SessionManager
             if (this.sessions.TryGetValue(tokenData.SessionId, out var session))
                 return session.TryGetUser(tokenData.User, out user);
             
-            user = default!;
             return ResultCode.SessionNotFound;
-        }
-        finally
-        {
-            if (lockTaken) this.spinLock.Exit();
-        }
-    }
-    
-    //HACK: 임시로 게임 포기를 구현하기 위한 함수
-    public bool TryQuitUser(string userId, out SessionUser user)
-    {
-        var lockTaken = false;
-        try
-        {
-            this.spinLock.Enter(ref lockTaken);
-            
-            foreach (var session in this.sessions.Values)
-            {
-                if (session.TryQuitUser(userId, out user))
-                    return true;
-            }
-
-            user = default!;
-            return false;
         }
         finally
         {
