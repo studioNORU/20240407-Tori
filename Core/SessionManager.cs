@@ -8,13 +8,24 @@ public class SessionManager
     public static SessionManager I => instance ??= new SessionManager();
 
     private SpinLock spinLock;
+    
+    /// <summary>
+    /// Require SpinLock to access
+    /// </summary>
     private uint nextSessionId;
+    
+    /// <summary>
+    /// Require SpinLock to access
+    /// </summary>
     private readonly Dictionary<string, GameSession> sessions = new();
 
     private GameSession GetActiveSession()
     {
-        lock (this)
+        var lockTaken = false;
+        try
         {
+            this.spinLock.Enter(ref lockTaken);
+            
             var session = this.sessions.Values.FirstOrDefault(s => s.CanAcceptUser());
             if (session != null) return session;
 
@@ -26,6 +37,10 @@ public class SessionManager
             }
 
             return CreateSession();
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
         }
         
         GameSession CreateSession()
@@ -46,21 +61,31 @@ public class SessionManager
 
     public ResultCode TryGetUser(TokenData tokenData, out SessionUser user)
     {
-        lock (this)
+        var lockTaken = false;
+        try
         {
+            this.spinLock.Enter(ref lockTaken);
+            
             if (this.sessions.TryGetValue(tokenData.SessionId, out var session))
                 return session.TryGetUser(tokenData.User, out user);
             
             user = default!;
             return ResultCode.SessionNotFound;
         }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
     }
     
     //HACK: 임시로 게임 포기를 구현하기 위한 함수
     public bool TryQuitUser(string userId, out SessionUser user)
     {
-        lock (this)
+        var lockTaken = false;
+        try
         {
+            this.spinLock.Enter(ref lockTaken);
+            
             foreach (var session in this.sessions.Values)
             {
                 if (session.TryQuitUser(userId, out user))
@@ -69,6 +94,10 @@ public class SessionManager
 
             user = default!;
             return false;
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
         }
     }
 }

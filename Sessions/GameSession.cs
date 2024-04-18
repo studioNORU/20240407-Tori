@@ -9,13 +9,15 @@ public class GameSession
 
     private SpinLock spinLock;
     private readonly int maxUserLimits;
+    
+    /// <summary>
+    /// Require SpinLock to access
+    /// </summary>
     private readonly List<SessionUser> users = new();
 
     public DateTime CreatedAt { get; private set; } = DateTime.MaxValue;
     public DateTime GameStartAt { get; private set; } = DateTime.MaxValue;
     public DateTime GameEndAt { get; private set; } = DateTime.MaxValue;
-
-    public IEnumerable<string> GetNicknames() => this.users.Select(user => user.Identifier.Nickname);
 
     public GameSession(string sessionId, string stageId)
     {
@@ -23,6 +25,20 @@ public class GameSession
         this.StageId = stageId;
         //TODO: 실제 설정을 참조하도록 해야함
         this.maxUserLimits = 50;
+    }
+    
+    public IEnumerable<string> GetNicknames()
+    {
+        var lockTaken = false;
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+            return this.users.Select(user => user.Identifier.Nickname);
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
     }
 
     public void SetActive()
