@@ -25,8 +25,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "이미 해당 유저가 게임에 참여 중이기 때문에 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(LoadingResponse))]
-    public async Task<IActionResult> Loading(
-        [FromBody] LoadingBody req)
+    public async Task<IActionResult> Loading([FromBody] LoadingBody req)
     {
         if (string.IsNullOrWhiteSpace(req.UserId)) return this.BadRequest();
         if (string.IsNullOrWhiteSpace(req.UserNickname)) return this.BadRequest();
@@ -82,10 +81,10 @@ public class ToriController : Controller
     [Route("gamestart")]
     [SwaggerOperation("게임 시작", "(WIP)")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status408RequestTimeout, "해당 API를 호출할 수 있는 시간이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다. loading API가 먼저 수행되어야 합니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameStartResponse))]
-    public async Task<IActionResult> GameStart(
-        [FromBody] AuthBody req)
+    public async Task<IActionResult> GameStart([FromBody] AuthBody req)
     {
         try
         {
@@ -97,19 +96,22 @@ public class ToriController : Controller
                     break;
             
                 case ResultCode.InvalidParameter:
-                case ResultCode.SessionNotFound:
                     return this.Unauthorized();
+                case ResultCode.SessionNotFound:
                 case ResultCode.NotJoinedUser:
                     return this.Conflict();
                 case ResultCode.UnhandledError:
                 default:
                     throw new InvalidOperationException(resultCode.ToString());
             }
+
+            var now = DateTime.UtcNow;
+            if (now < user!.PlaySession!.GameStartAt) return this.StatusCode(StatusCodes.Status408RequestTimeout);
         
             return this.Json(new GameStartResponse
             {
                 PlayerNicknames = user!.PlaySession!.GetNicknames().ToArray(),
-                CurrentTick = DateTime.UtcNow.Ticks,
+                CurrentTick = now.Ticks,
             });
         }
         catch (Exception e)
@@ -122,24 +124,52 @@ public class ToriController : Controller
     [HttpPost]
     [Route("gameend")]
     [SwaggerOperation("게임 종료", "(WIP)")]
-    [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status408RequestTimeout, "해당 API를 호출할 수 있는 시간이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameEndResponse))]
-    public async Task<IActionResult> GameEnd(
-        [FromBody] PlayInfoBody req)
+    public async Task<IActionResult> GameEnd([FromBody] PlayInfoBody req)
     {
-        if (string.IsNullOrWhiteSpace(req.Token)) return this.Unauthorized();
-        
-        return this.Json(new GameEndResponse()
+        try
         {
-            GameReward = new GameReward
+            var (resultCode, user) = await ValidateToken(req.Token);
+
+            switch (resultCode)
             {
-                RewardId = "TEST",
-                RewardImage = "https://placehold.jp/150x150.png"
-            },
-            CurrentTick = DateTime.UtcNow.Ticks,
-        });
+                case ResultCode.Ok:
+                    break;
+            
+                case ResultCode.InvalidParameter:
+                    return this.Unauthorized();
+                case ResultCode.SessionNotFound:
+                case ResultCode.NotJoinedUser:
+                    return this.Conflict();
+                case ResultCode.UnhandledError:
+                default:
+                    throw new InvalidOperationException(resultCode.ToString());
+            }
+
+            var now = DateTime.UtcNow;
+            if (now < user!.PlaySession!.GameEndAt) return this.StatusCode(StatusCodes.Status408RequestTimeout);
+        
+            return this.Json(new GameEndResponse()
+            {
+                GameReward = new GameReward
+                {
+                    RewardId = "TEST",
+                    RewardImage = "https://placehold.jp/150x150.png"
+                },
+                CurrentTick = now.Ticks,
+            });
+        }
+        catch (Exception e)
+        {
+            this.logger.LogCritical(e,
+                "API HAS EXCEPTION - gameend [token : {token}, hostTime : {hostTime}, itemCount : {itemCount}]",
+                req.Token, req.HostTime, req.ItemCount);
+            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
     
     [HttpPost]
@@ -148,8 +178,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GameQuit(
-        [FromBody] AuthBody body)
+    public async Task<IActionResult> GameQuit([FromBody] AuthBody body)
     {
         if (string.IsNullOrWhiteSpace(body.Token)) return this.Unauthorized();
         
@@ -166,8 +195,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
-    public async Task<IActionResult> Ranking(
-        [FromBody] PlayInfoBody body)
+    public async Task<IActionResult> Ranking([FromBody] PlayInfoBody body)
     {
         if (string.IsNullOrWhiteSpace(body.Token)) return this.Unauthorized();
         
@@ -198,8 +226,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
-    public async Task<IActionResult> Result(
-        [FromBody] AuthBody req)
+    public async Task<IActionResult> Result([FromBody] AuthBody req)
     {
         if (string.IsNullOrWhiteSpace(req.Token)) return this.Unauthorized();
         

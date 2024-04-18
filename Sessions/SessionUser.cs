@@ -17,6 +17,9 @@ public class SessionUser
         this.HostTime = 0UL;
     }
 
+    /// <summary>
+    /// <see cref="GameSession"/>에서만 사용해야 합니다
+    /// </summary>
     public void SetSession(GameSession? session)
     {
         this.IsPlaying = session != null;
