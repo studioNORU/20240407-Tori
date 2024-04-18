@@ -1,14 +1,13 @@
-﻿#pragma warning disable CS8618
-namespace tori.Sessions;
+﻿namespace tori.Sessions;
 
 public class SessionUser
 {
     public readonly UserIdentifier Identifier;
 
-    public uint ItemUsages { get; private set; }
-    public ulong HostTime { get; private set; }
+    public uint ItemUsages { get; set; }
+    public ulong HostTime { get; set; }
     public GameSession? PlaySession { get; private set; }
-    public bool HasQuit { get; private set; }
+    public bool HasQuit { get; set; }
     public bool IsPlaying { get; private set; }
 
     public SessionUser(UserIdentifier identifier)

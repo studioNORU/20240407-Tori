@@ -107,6 +107,7 @@ public class GameSession
 
             var user = new SessionUser(identifier);
             this.users.Add(user);
+            user.SetSession(this);
             return ResultCode.Ok;
         }
         finally

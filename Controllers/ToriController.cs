@@ -33,15 +33,19 @@ public class ToriController : Controller
 
         try
         {
-            switch (SessionManager.I.TryJoinUser(new UserIdentifier(req.UserId, req.UserNickname), out var session))
+            var resultCode =
+                SessionManager.I.TryJoinUser(new UserIdentifier(req.UserId, req.UserNickname), out var session);
+            
+            switch (resultCode)
             {
                 case ResultCode.Ok:
                     break;
+                
                 case ResultCode.AlreadyJoined:
                     return this.Conflict();
                 case ResultCode.UnhandledError:
                 default:
-                    throw new InvalidOperationException();
+                    throw new InvalidOperationException(resultCode.ToString());
             }
             
             return this.Json(new LoadingResponse
@@ -83,29 +87,36 @@ public class ToriController : Controller
     public async Task<IActionResult> GameStart(
         [FromBody] AuthBody req)
     {
-        var (resultCode, user) = await ValidateToken(req.Token);
+        try
+        {
+            var (resultCode, user) = await ValidateToken(req.Token);
 
-        switch (resultCode)
-        {
-            case ResultCode.Ok:
-                break;
+            switch (resultCode)
+            {
+                case ResultCode.Ok:
+                    break;
             
-            case ResultCode.InvalidParameter:
-                return this.Unauthorized();
-            case ResultCode.SessionNotFound:
-                return this.Unauthorized();
-            case ResultCode.NotJoinedUser:
-                return this.Conflict();
-            case ResultCode.UnhandledError:
-            default:
-                return this.Problem(resultCode.ToString());
-        }
+                case ResultCode.InvalidParameter:
+                case ResultCode.SessionNotFound:
+                    return this.Unauthorized();
+                case ResultCode.NotJoinedUser:
+                    return this.Conflict();
+                case ResultCode.UnhandledError:
+                default:
+                    throw new InvalidOperationException(resultCode.ToString());
+            }
         
-        return this.Json(new GameStartResponse
+            return this.Json(new GameStartResponse
+            {
+                PlayerNicknames = user!.PlaySession!.GetNicknames().ToArray(),
+                CurrentTick = DateTime.UtcNow.Ticks,
+            });
+        }
+        catch (Exception e)
         {
-            PlayerNicknames = user!.PlaySession!.GetNicknames().ToArray(),
-            CurrentTick = DateTime.UtcNow.Ticks,
-        });
+            this.logger.LogCritical(e, "API HAS EXCEPTION - gamestart [token : {token}]", req.Token);
+            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
     
     [HttpPost]
