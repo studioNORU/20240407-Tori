@@ -4,8 +4,8 @@ namespace tori.Sessions;
 
 public class GameSession
 {
-    public string SessionId { get; private set; }
-    public string StageId { get; private set; }
+    public string SessionId { get; }
+    public string StageId { get; }
 
     private SpinLock spinLock;
     private readonly int maxUserLimits;

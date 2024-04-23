@@ -110,7 +110,7 @@ public class ToriController : Controller
         
             return this.Json(new GameStartResponse
             {
-                PlayerNicknames = user!.PlaySession!.GetNicknames().ToArray(),
+                PlayerNicknames = user.PlaySession!.GetNicknames().ToArray(),
                 CurrentTick = now.Ticks,
             });
         }
