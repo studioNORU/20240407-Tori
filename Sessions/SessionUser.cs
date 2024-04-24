@@ -4,8 +4,8 @@ public class SessionUser
 {
     public readonly UserIdentifier Identifier;
 
-    public uint ItemUsages { get; set; }
-    public ulong HostTime { get; set; }
+    public int ItemUsages { get; set; }
+    public int HostTime { get; set; }
     public GameSession? PlaySession { get; private set; }
     public bool HasQuit { get; set; }
     public bool IsPlaying { get; private set; }
@@ -13,8 +13,8 @@ public class SessionUser
     public SessionUser(UserIdentifier identifier)
     {
         this.Identifier = identifier;
-        this.ItemUsages = 0U;
-        this.HostTime = 0UL;
+        this.ItemUsages = 0;
+        this.HostTime = 0;
     }
 
     /// <summary>

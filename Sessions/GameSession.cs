@@ -54,7 +54,7 @@ public class GameSession
             this.CreatedAt = now;
             //TODO: 실제 설정을 참조하도록 해야함
             this.GameStartAt = now.AddMinutes(1);
-            this.GameEndAt = now.AddMinutes(6);
+            this.GameEndAt = now.AddMinutes(4);
         }
         finally
         {
