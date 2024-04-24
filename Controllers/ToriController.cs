@@ -21,7 +21,7 @@ public class ToriController : Controller
 
     [HttpPost]
     [Route("loading")]
-    [SwaggerOperation("로딩", "게임 진입에 앞서 필요한 정보를 로딩합니다. (WIP)")]
+    [SwaggerOperation("로딩 (WIP)", "게임 진입에 앞서 필요한 정보를 로딩합니다. (WIP)")]
     [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "이미 해당 유저가 게임에 참여 중이기 때문에 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(LoadingResponse))]
@@ -51,6 +51,7 @@ public class ToriController : Controller
             {
                 Token = JwtToken.ToToken(req.UserId, req.UserNickname, session.SessionId),
                 Constants = new(),
+                RoomId = (int)session.SessionId,
                 StageId = session.StageId,
                 //TODO: 실제 데이터를 사용해야 함
                 GameReward = new GameReward
@@ -162,10 +163,10 @@ public class ToriController : Controller
             if (now < user!.PlaySession!.GameEndAt) return this.StatusCode(StatusCodes.Status408RequestTimeout);
             
             
-            if (user?.PlaySession == null) return this.Conflict();
+            if (user.PlaySession == null) return this.Conflict();
 
             // 게임 플레이 시간보다 쿠폰 소지 시간이 더 길 수는 없습니다
-            if ((now - user.PlaySession.GameStartAt).Seconds < req.HostTime)
+            if ((now - user.PlaySession.GameStartAt).TotalSeconds < req.HostTime)
                 return this.BadRequest();
             
             _ = user.PlaySession.UpdateRanking(user.Identifier, req.HostTime, req.ItemCount);
@@ -266,7 +267,7 @@ public class ToriController : Controller
 
             // 게임 플레이 시간보다 쿠폰 소지 시간이 더 길 수는 없습니다
             var now = DateTime.UtcNow;
-            if ((now - user.PlaySession.GameStartAt).Seconds < req.HostTime)
+            if ((now - user.PlaySession.GameStartAt).TotalSeconds < req.HostTime)
                 return this.BadRequest();
             
             var (first, mine) = user.PlaySession.UpdateRanking(user.Identifier, req.HostTime, req.ItemCount);
@@ -279,7 +280,7 @@ public class ToriController : Controller
                     UserNickname = mine.Identifier.Nickname,
                     RoomId = (int)user.PlaySession.SessionId,
                     Ranking = mine.Ranking,
-                    HostTime = mine.ItemCount,
+                    HostTime = mine.HostTime,
                 },
                 TopRank = new RankInfo
                 {
@@ -287,7 +288,7 @@ public class ToriController : Controller
                     UserNickname = first.Identifier.Nickname,
                     RoomId = (int)user.PlaySession.SessionId,
                     Ranking = first.Ranking,
-                    HostTime = first.ItemCount
+                    HostTime = first.HostTime
                 },
                 CurrentTick = DateTime.UtcNow.Ticks,
             });
@@ -303,7 +304,7 @@ public class ToriController : Controller
     
     [HttpPost]
     [Route("result")]
-    [SwaggerOperation("게임 최종 랭킹 결과 조회", "(WIP)")]
+    [SwaggerOperation("게임 최종 랭킹 결과 조회 (WIP)", "(WIP)")]
     [SwaggerResponse(StatusCodes.Status102Processing, "아직 계산이 완료되지 않았습니다. 다시 시도해주세요.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
@@ -322,8 +323,10 @@ public class ToriController : Controller
                 case ResultCode.InvalidParameter:
                     return this.Unauthorized();
                 case ResultCode.SessionNotFound:
-                case ResultCode.NotJoinedUser:
                     return this.Conflict();
+                case ResultCode.NotJoinedUser:
+                    // 이미 gameend를 호출했으니 이 경우에는 정상
+                    break;
                 case ResultCode.UnhandledError:
                 default:
                     throw new InvalidOperationException(resultCode.ToString());

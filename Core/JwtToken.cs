@@ -11,7 +11,7 @@ public static class JwtToken
     private const string UserIdKey = "userId";
     private const string NicknameKey = "nickname";
     private const string SessionIdKey = "sessionId";
-    private const string SecretKey = "T1O2R3I4secret";
+    private const string SecretKey = "TORIsecretSECURITYkey1234!@#$2345@#$%";
     
     private static readonly byte[] ByteSecretKey = Encoding.ASCII.GetBytes(SecretKey);
     private static readonly SymmetricSecurityKey SymmetricSecurityKey = new(ByteSecretKey);
@@ -50,13 +50,12 @@ public static class JwtToken
                 ClockSkew = TimeSpan.Zero,
             });
 
-            if (result.IsValid || result.SecurityToken is not JwtSecurityToken jwtToken)
+            if (!result.IsValid || result.SecurityToken is not JwtSecurityToken jwtToken)
             {
                 throw new SecurityTokenException("InvalidToken");
             }
 
-            if (!jwtToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256Signature,
-                    StringComparison.InvariantCultureIgnoreCase))
+            if (!jwtToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
             {
                 throw new SecurityTokenException("InvalidToken");
             }

@@ -12,6 +12,9 @@ public record LoadingResponse : BaseResponse
     [SwaggerSchema("게임에 관련된 상수들입니다.", Nullable = false)]
     public Dictionary<string, int> Constants { get; init; } = default!;
 
+    [SwaggerSchema("플레이어가 속한 방 번호입니다.", Nullable = false)]
+    public int RoomId { get; init; }
+    
     [SwaggerSchema("플레이어가 속한 스테이지의 ID입니다.", Nullable = false)]
     public string StageId { get; init; } = default!;
     
