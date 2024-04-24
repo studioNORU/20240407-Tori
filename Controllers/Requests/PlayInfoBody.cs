@@ -9,7 +9,7 @@ public record struct PlayInfoBody : IAuthBody
     public string Token { get; init; }
     
     [SwaggerSchema("호스트 시간 (점수)", Nullable = false)]
-    public int HostTime { get; init; }
+    public float HostTime { get; init; }
     
     [SwaggerSchema("아이템 사용 횟수", Nullable = false)]
     public int ItemCount { get; init; }

@@ -6,7 +6,6 @@ public enum ResultCode
     UnhandledError = -1,
     Ok,
     
-    // Session
     AlreadyJoined,
     SessionNotFound,
     NotJoinedUser,

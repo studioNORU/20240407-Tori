@@ -17,7 +17,7 @@ public class SessionManager
     /// <summary>
     /// Require SpinLock to access
     /// </summary>
-    private readonly Dictionary<string, GameSession> sessions = new();
+    private readonly Dictionary<uint, GameSession> sessions = new();
 
     private GameSession GetActiveSession()
     {
@@ -45,8 +45,8 @@ public class SessionManager
         
         GameSession CreateSession()
         {
-            var sessionId = $"s{this.nextSessionId++}";
-            var session = new GameSession(sessionId, sessionId);
+            var sessionId = this.nextSessionId++;
+            var session = new GameSession(sessionId, sessionId.ToString());
             session.SetActive();
             this.sessions.Add(sessionId, session);
             return session;

@@ -52,6 +52,12 @@ public class ToriController : Controller
                 Token = JwtToken.ToToken(req.UserId, req.UserNickname, session.SessionId),
                 Constants = new(),
                 StageId = session.StageId,
+                //TODO: 실제 데이터를 사용해야 함
+                GameReward = new GameReward
+                {
+                    RewardId = "TEST",
+                    RewardImage = "https://placehold.jp/150x150.png"
+                },
                 GameStartUtc = session.GameStartAt.Ticks,
                 GameEndUtc = session.GameEndAt.Ticks,
                 CurrentTick = DateTime.UtcNow.Ticks,
@@ -71,7 +77,6 @@ public class ToriController : Controller
         
         var (isValid, data) = await JwtToken.Parse(token);
         if (!isValid || string.IsNullOrWhiteSpace(data.User.Id)) return (ResultCode.InvalidParameter, null);
-        if (string.IsNullOrWhiteSpace(data.SessionId)) return (ResultCode.InvalidParameter, null);
 
         var result = SessionManager.I.TryGetUser(data, out var user);
         return (result, user);
@@ -79,7 +84,7 @@ public class ToriController : Controller
 
     [HttpPost]
     [Route("gamestart")]
-    [SwaggerOperation("게임 시작", "(WIP)")]
+    [SwaggerOperation("게임 시작", "대기를 종료하고 게임을 시작했다는 것을 알립니다.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status408RequestTimeout, "해당 API를 호출할 수 있는 시간이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다. loading API가 먼저 수행되어야 합니다.")]
@@ -123,7 +128,7 @@ public class ToriController : Controller
     
     [HttpPost]
     [Route("gameend")]
-    [SwaggerOperation("게임 종료", "(WIP)")]
+    [SwaggerOperation("게임 종료", "게임 플레이를 정상적으로 완료했음을 알립니다.")]
     [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status408RequestTimeout, "해당 API를 호출할 수 있는 시간이 아닙니다.")]
@@ -133,6 +138,9 @@ public class ToriController : Controller
     {
         try
         {
+            if (req.HostTime < 0) return this.BadRequest();
+            if (req.ItemCount < 0) return this.BadRequest();
+
             var (resultCode, user) = await ValidateToken(req.Token);
 
             switch (resultCode)
@@ -153,6 +161,15 @@ public class ToriController : Controller
             var now = DateTime.UtcNow;
             if (now < user!.PlaySession!.GameEndAt) return this.StatusCode(StatusCodes.Status408RequestTimeout);
             
+            
+            if (user?.PlaySession == null) return this.Conflict();
+
+            // 게임 플레이 시간보다 쿠폰 소지 시간이 더 길 수는 없습니다
+            if ((now - user.PlaySession.GameStartAt).Seconds < req.HostTime)
+                return this.BadRequest();
+            
+            _ = user.PlaySession.UpdateRanking(user.Identifier, req.HostTime, req.ItemCount);
+            
             resultCode = SessionManager.I.TryLeave(user, isQuit: false);
 
             if (resultCode != ResultCode.Ok || user.HasQuit)
@@ -160,11 +177,6 @@ public class ToriController : Controller
         
             return this.Json(new GameEndResponse()
             {
-                GameReward = new GameReward
-                {
-                    RewardId = "TEST",
-                    RewardImage = "https://placehold.jp/150x150.png"
-                },
                 CurrentTick = now.Ticks,
             });
         }
@@ -179,7 +191,7 @@ public class ToriController : Controller
     
     [HttpPost]
     [Route("gamequit")]
-    [SwaggerOperation("게임 포기", "테스트를 위해 토큰 대신 userId를 입력해 게임을 포기시킵니다. (WIP)")]
+    [SwaggerOperation("게임 포기", "게임 방에서 유저를 이탈시킵니다.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK)]
@@ -221,33 +233,72 @@ public class ToriController : Controller
     
     [HttpPost]
     [Route("ranking")]
-    [SwaggerOperation("게임 랭킹 정보 갱신", "(WIP)")]
+    [SwaggerOperation("게임 랭킹 정보 갱신", "게임 랭킹 정보를 갱신하고 갱신된 랭킹 정보를 반환합니다.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
     public async Task<IActionResult> Ranking([FromBody] PlayInfoBody req)
     {
-        if (string.IsNullOrWhiteSpace(req.Token)) return this.Unauthorized();
-        
-        return this.Json(new RankingResponse
+        try
         {
-            MyRank = new RankInfo
+            if (req.HostTime < 0) return this.BadRequest();
+            if (req.ItemCount < 0) return this.BadRequest();
+            
+            var (resultCode, user) = await ValidateToken(req.Token);
+
+            switch (resultCode)
             {
-                UserId = "asd",
-                UserNickname = "nickname1",
-                Ranking = 1,
-                HostTime = 123,
-            },
-            TopRank = new RankInfo
+                case ResultCode.Ok:
+                    break;
+            
+                case ResultCode.InvalidParameter:
+                    return this.Unauthorized();
+                case ResultCode.SessionNotFound:
+                case ResultCode.NotJoinedUser:
+                    return this.Conflict();
+                case ResultCode.UnhandledError:
+                default:
+                    throw new InvalidOperationException(resultCode.ToString());
+            }
+
+            if (user?.PlaySession == null) return this.Conflict();
+
+            // 게임 플레이 시간보다 쿠폰 소지 시간이 더 길 수는 없습니다
+            var now = DateTime.UtcNow;
+            if ((now - user.PlaySession.GameStartAt).Seconds < req.HostTime)
+                return this.BadRequest();
+            
+            var (first, mine) = user.PlaySession.UpdateRanking(user.Identifier, req.HostTime, req.ItemCount);
+
+            return this.Json(new RankingResponse
             {
-                UserId = "asd",
-                UserNickname = "nickname1",
-                Ranking = 1,
-                HostTime = 123,
-            },
-            CurrentTick = DateTime.UtcNow.Ticks,
-        });
+                MyRank = new RankInfo
+                {
+                    UserId = mine.Identifier.Id,
+                    UserNickname = mine.Identifier.Nickname,
+                    RoomId = (int)user.PlaySession.SessionId,
+                    Ranking = mine.Ranking,
+                    HostTime = mine.ItemCount,
+                },
+                TopRank = new RankInfo
+                {
+                    UserId = first.Identifier.Id,
+                    UserNickname = first.Identifier.Nickname,
+                    RoomId = (int)user.PlaySession.SessionId,
+                    Ranking = first.Ranking,
+                    HostTime = first.ItemCount
+                },
+                CurrentTick = DateTime.UtcNow.Ticks,
+            });
+        }
+        catch (Exception e)
+        {
+            this.logger.LogCritical(e,
+                "API HAS EXCEPTION - ranking [token : {token}, hostTime : {hostTime}, itemCount : {itemCount}]",
+                req.Token, req.HostTime, req.ItemCount);
+            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
     
     [HttpPost]
@@ -259,25 +310,58 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
     public async Task<IActionResult> Result([FromBody] AuthBody req)
     {
-        if (string.IsNullOrWhiteSpace(req.Token)) return this.Unauthorized();
-        
-        return this.Json(new RankingResponse
+        try
         {
-            MyRank = new RankInfo
+            var (resultCode, user) = await ValidateToken(req.Token);
+
+            switch (resultCode)
             {
-                UserId = "asd",
-                UserNickname = "nickname1",
-                Ranking = 1,
-                HostTime = 123,
-            },
-            TopRank = new RankInfo
+                case ResultCode.Ok:
+                    break;
+            
+                case ResultCode.InvalidParameter:
+                    return this.Unauthorized();
+                case ResultCode.SessionNotFound:
+                case ResultCode.NotJoinedUser:
+                    return this.Conflict();
+                case ResultCode.UnhandledError:
+                default:
+                    throw new InvalidOperationException(resultCode.ToString());
+            }
+
+            if (user?.PlaySession == null) return this.Conflict();
+            
+            //TODO: 랭킹 집계가 완료되지 않았으면 Processing을 반환해야 함
+            
+            resultCode = user.PlaySession.TryGetRanking(user.Identifier, out var first, out var mine);
+            if (resultCode != ResultCode.Ok) return this.Conflict();
+
+            return this.Json(new RankingResponse
             {
-                UserId = "asd",
-                UserNickname = "nickname1",
-                Ranking = 1,
-                HostTime = 123,
-            },
-            CurrentTick = DateTime.UtcNow.Ticks,
-        });
+                MyRank = new RankInfo
+                {
+                    UserId = mine.Identifier.Id,
+                    UserNickname = mine.Identifier.Nickname,
+                    RoomId = (int)user.PlaySession.SessionId,
+                    Ranking = mine.Ranking,
+                    HostTime = mine.ItemCount,
+                },
+                TopRank = new RankInfo
+                {
+                    UserId = first.Identifier.Id,
+                    UserNickname = first.Identifier.Nickname,
+                    RoomId = (int)user.PlaySession.SessionId,
+                    Ranking = first.Ranking,
+                    HostTime = first.ItemCount
+                },
+                CurrentTick = DateTime.UtcNow.Ticks,
+            });
+        }
+        catch (Exception e)
+        {
+            this.logger.LogCritical(e,
+                "API HAS EXCEPTION - result [token : {token}", req.Token);
+            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 }

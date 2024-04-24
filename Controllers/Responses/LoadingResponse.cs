@@ -1,4 +1,5 @@
 ﻿using Swashbuckle.AspNetCore.Annotations;
+using Tori.Controllers.Data;
 
 namespace tori.Controllers.Responses;
 
@@ -13,6 +14,9 @@ public record LoadingResponse : BaseResponse
 
     [SwaggerSchema("플레이어가 속한 스테이지의 ID입니다.", Nullable = false)]
     public string StageId { get; init; } = default!;
+    
+    [SwaggerSchema("게임 경품 정보", Nullable = false)]
+    public GameReward GameReward { get; init; } = default!;
 
     [SwaggerSchema("게임 시작 시간에 대한 C# DateTime.Ticks입니다.", Nullable = false)]
     public long GameStartUtc { get; init; }

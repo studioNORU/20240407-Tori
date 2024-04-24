@@ -4,11 +4,12 @@ namespace tori.Sessions;
 
 public class GameSession
 {
-    public string SessionId { get; }
+    public uint SessionId { get; }
     public string StageId { get; }
 
     private SpinLock spinLock;
     private readonly int maxUserLimits;
+    private readonly GameRanking ranking = new();
     
     /// <summary>
     /// Require SpinLock to access
@@ -19,7 +20,7 @@ public class GameSession
     public DateTime GameStartAt { get; private set; } = DateTime.MaxValue;
     public DateTime GameEndAt { get; private set; } = DateTime.MaxValue;
 
-    public GameSession(string sessionId, string stageId)
+    public GameSession(uint sessionId, string stageId)
     {
         this.SessionId = sessionId;
         this.StageId = stageId;
@@ -185,6 +186,34 @@ public class GameSession
         finally
         {
             if (lockTaken) this.spinLock.Exit();
+        }
+    }
+
+    public (GameRanking.RankItem first, GameRanking.RankItem mine) UpdateRanking(
+        UserIdentifier userIdentifier, float hostTime, int itemCount)
+    {
+        lock (this.ranking)
+        {
+            var mine = this.ranking.Update(userIdentifier, hostTime, itemCount);
+            var first = this.ranking.GetFirst();
+
+            return (first, mine);
+        }
+    }
+
+    public ResultCode TryGetRanking(UserIdentifier userIdentifier, out GameRanking.RankItem first, out GameRanking.RankItem mine)
+    {
+        first = default!;
+        mine = default!;
+        
+        lock (this.ranking)
+        {
+            if (!this.ranking.TryGetRankItem(userIdentifier, out var found) || found == null)
+                return ResultCode.NotJoinedUser;
+
+            mine = found;
+            first = this.ranking.GetFirst();
+            return ResultCode.Ok;
         }
     }
 }
