@@ -13,10 +13,12 @@ namespace Tori.Controllers;
 public class ToriController : Controller
 {
     private readonly ILogger<ToriController> logger;
+    private readonly AppDbContext dbContext;
 
-    public ToriController(ILogger<ToriController> logger)
+    public ToriController(ILogger<ToriController> logger, AppDbContext dbContext)
     {
         this.logger = logger;
+        this.dbContext = dbContext;
     }
 
     [HttpPost]
@@ -46,11 +48,13 @@ public class ToriController : Controller
                 default:
                     throw new InvalidOperationException(resultCode.ToString());
             }
+
+            var constants = this.dbContext.GameConstants.ToDictionary(x => x.Key, x => x.Value);
             
             return this.Json(new LoadingResponse
             {
                 Token = JwtToken.ToToken(req.UserId, req.UserNickname, session.SessionId),
-                Constants = new(),
+                Constants = constants,
                 RoomId = (int)session.SessionId,
                 StageId = session.StageId,
                 //TODO: 실제 데이터를 사용해야 함

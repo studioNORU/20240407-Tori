@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi.Models;
+using tori.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddDbContext<AppDbContext>();
 builder.Services.AddControllers(config =>
 {
     foreach (var formatter in config.InputFormatters)
