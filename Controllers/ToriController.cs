@@ -96,7 +96,7 @@ public class ToriController : Controller
     [SwaggerOperation("게임 시작", "대기를 종료하고 게임을 시작했다는 것을 알립니다.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status408RequestTimeout, "해당 API를 호출할 수 있는 시간이 아닙니다.")]
-    [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다. loading API가 먼저 수행되어야 합니다.")]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다. loading API가 먼저 수행되어야 합니다. 혹은 이미 gamestart가 처리되었습니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameStartResponse))]
     public async Task<IActionResult> GameStart([FromBody] AuthBody req)
     {
@@ -127,7 +127,11 @@ public class ToriController : Controller
             resultCode = SessionManager.I.Start(user);
 
             if (resultCode != ResultCode.Ok)
+            {
+                if (resultCode is ResultCode.SessionNotFound or ResultCode.NotJoinedUser or ResultCode.AlreadyJoined)
+                    return this.Conflict();
                 throw new InvalidOperationException(resultCode.ToString());
+            }
         
             return this.Json(new GameStartResponse
             {
@@ -185,7 +189,11 @@ public class ToriController : Controller
             resultCode = SessionManager.I.TryLeave(user, isQuit: false);
 
             if (resultCode != ResultCode.Ok)
+            {
+                if (resultCode is ResultCode.SessionNotFound or ResultCode.NotJoinedUser)
+                    return this.Conflict();
                 throw new InvalidOperationException(resultCode.ToString());
+            }
 
             // 최종 집계를 진행할 수 있는 시간이라면 집계 마감 관련 처리를 합니다
             if (user.PlaySession.GameEndAt <= now)
@@ -237,7 +245,11 @@ public class ToriController : Controller
             resultCode = SessionManager.I.TryLeave(user, isQuit: true);
 
             if (resultCode != ResultCode.Ok || user.HasQuit != true)
+            {
+                if (resultCode is ResultCode.SessionNotFound or ResultCode.NotJoinedUser)
+                    return this.Conflict();
                 throw new InvalidOperationException(resultCode.ToString());
+            }
 
             return this.Ok();
         }
@@ -322,8 +334,8 @@ public class ToriController : Controller
     [HttpPost]
     [Route("result")]
     [SwaggerOperation("게임 최종 랭킹 결과 조회", "집계가 완료된 최종 랭킹 정보를 조회합니다.")]
-    [SwaggerResponse(StatusCodes.Status102Processing, "아직 계산이 완료되지 않았습니다. 다시 시도해주세요.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status408RequestTimeout, "아직 계산이 완료되지 않았습니다. 다시 시도해주세요.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
     public async Task<IActionResult> Result([FromBody] AuthBody req)
@@ -352,8 +364,8 @@ public class ToriController : Controller
             if (user?.PlaySession == null || !user.HasJoined || user.HasQuit) return this.Conflict();
             
             var now = DateTime.UtcNow;
-            if (user.PlaySession.CloseAt == null || user.PlaySession.CloseAt < now)
-                return this.StatusCode(StatusCodes.Status102Processing);
+            if (user.PlaySession.CloseAt == null || now < user.PlaySession.CloseAt)
+                return this.StatusCode(StatusCodes.Status408RequestTimeout);
             
             resultCode = user.PlaySession.TryGetRanking(user.Identifier, out var first, out var mine);
             if (resultCode != ResultCode.Ok) return this.Conflict();
@@ -366,7 +378,7 @@ public class ToriController : Controller
                     UserNickname = mine.Identifier.Nickname,
                     RoomId = (int)user.PlaySession.SessionId,
                     Ranking = mine.Ranking,
-                    HostTime = mine.ItemCount,
+                    HostTime = mine.HostTime,
                 },
                 TopRank = new RankInfo
                 {
@@ -374,7 +386,7 @@ public class ToriController : Controller
                     UserNickname = first.Identifier.Nickname,
                     RoomId = (int)user.PlaySession.SessionId,
                     Ranking = first.Ranking,
-                    HostTime = first.ItemCount
+                    HostTime = first.HostTime
                 },
                 CurrentTick = DateTime.UtcNow.Ticks,
             });

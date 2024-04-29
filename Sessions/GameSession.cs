@@ -151,8 +151,6 @@ public class GameSession
     /// <param name="identifier">입장하는 유저의 식별 정보</param>
     public ResultCode JoinUser(UserIdentifier identifier)
     {
-        if (!this.CanAcceptUser()) return ResultCode.UnhandledError;
-        
         var lockTaken = false;
         try
         {
@@ -161,11 +159,30 @@ public class GameSession
             if (this.activeUsers.Any(u => u.IsSame(identifier))) return ResultCode.AlreadyJoined;
 
             var user = this.users.FirstOrDefault(u => u.IsSame(identifier));
-            if (user == null)
+            
+            // 신규 유저
+            if (user == null && InternalCanAcceptUser())
             {
                 user = new SessionUser(identifier, DateTime.UtcNow);
                 this.users.Add(user);
             }
+            // gameend 이후 다시 재개하는 유저
+            else if (user != null)
+            {
+                if (user.HasJoined && !user.HasLeft) return ResultCode.AlreadyJoined;
+                
+                // gamestart 호출 가능한 시점 이후라면 관련 처리 진행
+                if (this.GameStartAt <= DateTime.UtcNow)
+                {
+                    if (!this.ranking.TryGetRankItem(user.Identifier, out var rankItem) || rankItem == null)
+                        this.ranking.Register(user.Identifier, user.JoinedAt.Ticks);
+                    
+                    this.activeUsers.Add(user);
+                    user.IsPlaying = true;
+                }
+            }
+            // 그 외의 경우에는 진입 불가
+            else return ResultCode.UnhandledError;
             
             user.SetSession(this);
             user.HasQuit = false;
@@ -176,6 +193,18 @@ public class GameSession
         finally
         {
             if (lockTaken) this.spinLock.Exit();
+        }
+        
+        bool InternalCanAcceptUser()
+        {
+            var now = DateTime.UtcNow;
+
+            // 생성되지 않은 방에는 입장 불가
+            if (now < this.CreatedAt) return false;
+            // 이미 게임이 시작된 방에는 입장 불가
+            if (this.GameStartAt <= now) return false;
+
+            return this.activeUsers.Count < this.maxUserLimits;
         }
     }
 
@@ -218,7 +247,7 @@ public class GameSession
             this.spinLock.Enter(ref lockTaken);
 
             if (user.PlaySession != this) return ResultCode.NotJoinedUser;
-            if (user.HasQuit || !user.IsPlaying) return ResultCode.NotJoinedUser;
+            if (user.HasLeft) return ResultCode.NotJoinedUser;
 
             if (isQuit) user.HasQuit = true;
             user.HasLeft = true;

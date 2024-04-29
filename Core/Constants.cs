@@ -3,6 +3,11 @@
 public static class Constants
 {
     /// <summary>
+    /// JWT 토큰의 유효 시간입니다. (분 단위)
+    /// </summary>
+    public const int JwtTokenDurationMinutes = 60;
+    
+    /// <summary>
     /// 참가자 입장 대기 시간입니다. (초 단위)
     /// </summary>
     public const int SessionWaitingEntrySeconds = 60;

@@ -28,7 +28,7 @@ public static class JwtToken
                 new Claim(NicknameKey, nickname),
                 new Claim(SessionIdKey, sessionId.ToString())
             }),
-            Expires = DateTime.UtcNow.AddHours(1),
+            Expires = DateTime.UtcNow.AddMinutes(Constants.JwtTokenDurationMinutes),
             SigningCredentials = Credentials,
         };
 

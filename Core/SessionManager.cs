@@ -24,6 +24,7 @@ public class SessionManager
     public static GameStage SelectStage(AppDbContext dbContext)
     {
         return dbContext.GameStages
+            .ToList()
             .OrderBy(x => Random.Shared.Next())
             .First();
     }
@@ -88,7 +89,7 @@ public class SessionManager
                     continue;
                 
                 // 이 방에서 조회한 유저 정보로 할당된 방 정보를 확인할 수 없거나 이미 게임이 종료되었다면 다른 방을 확인합니다
-                if (user.PlaySession == null || user.PlaySession.GameEndAt <= now)
+                if (user.PlaySession == null || user.PlaySession.CloseAt <= now)
                     continue;
 
                 // 이 방에서 게임을 재개할 수 있다면 방 정보를 전달합니다
