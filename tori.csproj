@@ -27,11 +27,4 @@
       <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.5.1" />
     </ItemGroup>
 
-    <ItemGroup>
-      <Content Remove="Tests\http-client.env.json" />
-      <None Include="Tests\http-client.env.json">
-        <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-      </None>
-    </ItemGroup>
-
 </Project>
