@@ -84,6 +84,8 @@ public class ToriController : Controller
         if (!isValid || string.IsNullOrWhiteSpace(data.User.Id)) return (ResultCode.InvalidParameter, null);
 
         var result = SessionManager.I.TryGetUser(data, out var user);
+        if (user.HasQuit) return (ResultCode.NotJoinedUser, user);
+        
         return (result, user);
     }
 

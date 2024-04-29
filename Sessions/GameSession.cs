@@ -14,6 +14,11 @@ public class GameSession
     /// <summary>
     /// Require SpinLock to access
     /// </summary>
+    private readonly List<SessionUser> activeUsers = new();
+    
+    /// <summary>
+    /// Require SpinLock to access
+    /// </summary>
     private readonly List<SessionUser> users = new();
 
     public DateTime CreatedAt { get; private set; } = DateTime.MaxValue;
@@ -34,7 +39,7 @@ public class GameSession
         try
         {
             this.spinLock.Enter(ref lockTaken);
-            return this.users.Select(user => user.Identifier.Nickname);
+            return this.activeUsers.Select(user => user.Identifier.Nickname);
         }
         finally
         {
@@ -49,7 +54,9 @@ public class GameSession
         {
             this.spinLock.Enter(ref lockTaken);
             
-            if (this.users.Count != 0) throw new InvalidOperationException();
+            if (this.activeUsers.Count != 0) throw new InvalidOperationException();
+            this.activeUsers.Clear();
+            this.users.Clear();
 
             var now = DateTime.UtcNow;
             this.CreatedAt = now;
@@ -78,7 +85,7 @@ public class GameSession
             this.spinLock.Enter(ref lockTaken);
             
             // 방에 입장 가능한 유저 수 제한을 지켜야 함
-            return this.users.Count < this.maxUserLimits;
+            return this.activeUsers.Count < this.maxUserLimits;
         }
         finally
         {
@@ -93,7 +100,7 @@ public class GameSession
         {
             this.spinLock.Enter(ref lockTaken);
             
-            if (this.users.Count != 0) return false;
+            if (this.activeUsers.Count != 0) return false;
 
             var now = DateTime.UtcNow;
             
@@ -124,11 +131,14 @@ public class GameSession
         {
             this.spinLock.Enter(ref lockTaken);
             
-            if (this.users.Any(u => u.IsSame(identifier))) return ResultCode.AlreadyJoined;
+            if (this.activeUsers.Any(u => u.IsSame(identifier))) return ResultCode.AlreadyJoined;
 
             var user = new SessionUser(identifier);
+            this.activeUsers.Add(user);
             this.users.Add(user);
             user.SetSession(this);
+            user.IsPlaying = true;
+            user.HasQuit = false;
             return ResultCode.Ok;
         }
         finally
@@ -153,8 +163,8 @@ public class GameSession
             if (user.HasQuit || !user.IsPlaying) return ResultCode.NotJoinedUser;
 
             if (isQuit) user.HasQuit = true;
-            this.users.Remove(user);
-            user.SetSession(null);
+            user.IsPlaying = false;
+            this.activeUsers.Remove(user);
             return ResultCode.Ok;
         }
         finally

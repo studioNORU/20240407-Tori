@@ -4,17 +4,13 @@ public class SessionUser
 {
     public readonly UserIdentifier Identifier;
 
-    public int ItemUsages { get; set; }
-    public int HostTime { get; set; }
     public GameSession? PlaySession { get; private set; }
     public bool HasQuit { get; set; }
-    public bool IsPlaying { get; private set; }
+    public bool IsPlaying { get; set; }
 
     public SessionUser(UserIdentifier identifier)
     {
         this.Identifier = identifier;
-        this.ItemUsages = 0;
-        this.HostTime = 0;
     }
 
     /// <summary>
@@ -22,7 +18,6 @@ public class SessionUser
     /// </summary>
     public void SetSession(GameSession? session)
     {
-        this.IsPlaying = session != null;
         this.PlaySession = session;
     }
 
