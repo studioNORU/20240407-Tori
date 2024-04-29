@@ -1,4 +1,6 @@
-﻿using tori.Sessions;
+﻿using Microsoft.EntityFrameworkCore;
+using tori.Models;
+using tori.Sessions;
 
 namespace tori.Core;
 
@@ -12,14 +14,21 @@ public class SessionManager
     /// <summary>
     /// Require SpinLock to access
     /// </summary>
-    private uint nextSessionId;
+    private uint nextSessionId = 1;
     
     /// <summary>
     /// Require SpinLock to access
     /// </summary>
     private readonly Dictionary<uint, GameSession> sessions = new();
-
-    private GameSession GetActiveSession()
+    
+    public static GameStage SelectStage(AppDbContext dbContext)
+    {
+        return dbContext.GameStages
+            .OrderBy(x => Random.Shared.Next())
+            .First();
+    }
+    
+    private GameSession GetActiveSession(AppDbContext dbContext)
     {
         var lockTaken = false;
         try
@@ -32,7 +41,8 @@ public class SessionManager
             session = this.sessions.Values.FirstOrDefault(s => s.IsReusable());
             if (session != null)
             {
-                session.SetActive();
+                var stage = SelectStage(dbContext);
+                session.SetActive(stage);
                 return session;
             }
 
@@ -46,8 +56,9 @@ public class SessionManager
         GameSession CreateSession()
         {
             var sessionId = this.nextSessionId++;
-            var session = new GameSession(sessionId, sessionId.ToString());
-            session.SetActive();
+            var stage = SelectStage(dbContext);
+            var session = new GameSession(sessionId, stage);
+            session.SetActive(stage);
             this.sessions.Add(sessionId, session);
             return session;
         }
@@ -57,10 +68,11 @@ public class SessionManager
     /// 세션에 새 유저를 입장시킵니다
     /// </summary>
     /// <param name="identifier">입장하는 유저의 식별 정보</param>
+    /// <param name="dbContext">DB 컨텍스트</param>
     /// <param name="session">유저가 입장한 세션</param>
-    public ResultCode TryJoin(UserIdentifier identifier, out GameSession session)
+    public ResultCode TryJoin(UserIdentifier identifier, AppDbContext dbContext, out GameSession session)
     {
-        session = this.GetActiveSession();
+        session = this.GetActiveSession(dbContext);
         return session.JoinUser(identifier);
     }
     

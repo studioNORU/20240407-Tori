@@ -1,4 +1,5 @@
 ﻿using tori.Core;
+using tori.Models;
 
 namespace tori.Sessions;
 
@@ -25,12 +26,11 @@ public class GameSession
     public DateTime GameStartAt { get; private set; } = DateTime.MaxValue;
     public DateTime GameEndAt { get; private set; } = DateTime.MaxValue;
 
-    public GameSession(uint sessionId, string stageId)
+    public GameSession(uint sessionId, GameStage stage)
     {
         this.SessionId = sessionId;
-        this.StageId = stageId;
-        //TODO: 실제 설정을 참조하도록 해야함
-        this.maxUserLimits = 50;
+        this.StageId = stage.StageId;
+        this.maxUserLimits = stage.MaxPlayer;
     }
     
     public IEnumerable<string> GetNicknames()
@@ -47,7 +47,7 @@ public class GameSession
         }
     }
 
-    public void SetActive()
+    public void SetActive(GameStage stage)
     {
         var lockTaken = false;
         try
@@ -60,9 +60,8 @@ public class GameSession
 
             var now = DateTime.UtcNow;
             this.CreatedAt = now;
-            //TODO: 실제 설정을 참조하도록 해야함
-            this.GameStartAt = now.AddMinutes(1);
-            this.GameEndAt = now.AddMinutes(4);
+            this.GameStartAt = now.AddSeconds(Constants.SessionWaitingEntrySeconds);
+            this.GameEndAt = this.GameStartAt.AddMilliseconds(stage.Time);
         }
         finally
         {

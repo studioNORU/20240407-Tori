@@ -35,7 +35,7 @@ public class ToriController : Controller
         try
         {
             var resultCode =
-                SessionManager.I.TryJoin(new UserIdentifier(req.UserId, req.UserNickname), out var session);
+                SessionManager.I.TryJoin(new UserIdentifier(req.UserId, req.UserNickname), this.dbContext, out var session);
             
             switch (resultCode)
             {
