@@ -1,4 +1,5 @@
-﻿using Swashbuckle.AspNetCore.Annotations;
+﻿using System.Text.Json.Serialization;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace Tori.Controllers.Requests;
 
@@ -11,6 +12,9 @@ public record struct PlayInfoBody : IAuthBody
     [SwaggerSchema("호스트 시간 (점수)", Nullable = false)]
     public float HostTime { get; init; }
     
-    [SwaggerSchema("아이템 사용 횟수", Nullable = false)]
-    public int ItemCount { get; init; }
+    [SwaggerSchema("아이템별 사용 횟수", Nullable = false)]
+    public Dictionary<string, int> UsedItems { get; init; }
+
+    [JsonIgnore]
+    public int ItemCount => this.UsedItems.Values.Sum();
 }
