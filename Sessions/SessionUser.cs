@@ -3,14 +3,18 @@
 public class SessionUser
 {
     public readonly UserIdentifier Identifier;
+    public readonly DateTime JoinedAt;
 
     public GameSession? PlaySession { get; private set; }
+    public bool HasJoined { get; set; }
     public bool HasQuit { get; set; }
+    public bool HasLeft { get; set; }
     public bool IsPlaying { get; set; }
 
-    public SessionUser(UserIdentifier identifier)
+    public SessionUser(UserIdentifier identifier, DateTime joinedAt)
     {
         this.Identifier = identifier;
+        this.JoinedAt = joinedAt;
     }
 
     /// <summary>

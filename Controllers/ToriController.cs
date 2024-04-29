@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
 using Tori.Controllers.Data;
 using Tori.Controllers.Requests;
@@ -49,7 +50,8 @@ public class ToriController : Controller
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
-            var constants = this.dbContext.GameConstants.ToDictionary(x => x.Key, x => x.Value);
+            var constants = await this.dbContext.GameConstants
+                .ToDictionaryAsync(x => x.Key, x => x.Value);
             
             return this.Json(new LoadingResponse
             {
@@ -117,8 +119,15 @@ public class ToriController : Controller
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft) return this.Conflict();
+
             var now = DateTime.UtcNow;
-            if (now < user!.PlaySession!.GameStartAt) return this.StatusCode(StatusCodes.Status408RequestTimeout);
+            if (now < user.PlaySession.GameStartAt) return this.StatusCode(StatusCodes.Status408RequestTimeout);
+
+            resultCode = SessionManager.I.Start(user);
+
+            if (resultCode != ResultCode.Ok)
+                throw new InvalidOperationException(resultCode.ToString());
         
             return this.Json(new GameStartResponse
             {
@@ -135,10 +144,9 @@ public class ToriController : Controller
     
     [HttpPost]
     [Route("gameend")]
-    [SwaggerOperation("게임 종료", "게임 플레이를 정상적으로 완료했음을 알립니다.")]
+    [SwaggerOperation("게임 종료", "게임 플레이를 종료합니다.")]
     [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
-    [SwaggerResponse(StatusCodes.Status408RequestTimeout, "해당 API를 호출할 수 있는 시간이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameEndResponse))]
     public async Task<IActionResult> GameEnd([FromBody] PlayInfoBody req)
@@ -165,13 +173,10 @@ public class ToriController : Controller
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
-            var now = DateTime.UtcNow;
-            if (now < user!.PlaySession!.GameEndAt) return this.StatusCode(StatusCodes.Status408RequestTimeout);
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft) return this.Conflict();
             
-            
-            if (user.PlaySession == null) return this.Conflict();
-
             // 게임 플레이 시간보다 쿠폰 소지 시간이 더 길 수는 없습니다
+            var now = DateTime.UtcNow;
             if ((now - user.PlaySession.GameStartAt).TotalSeconds < req.HostTime)
                 return this.BadRequest();
             
@@ -179,10 +184,14 @@ public class ToriController : Controller
             
             resultCode = SessionManager.I.TryLeave(user, isQuit: false);
 
-            if (resultCode != ResultCode.Ok || user.HasQuit)
+            if (resultCode != ResultCode.Ok)
                 throw new InvalidOperationException(resultCode.ToString());
+
+            // 최종 집계를 진행할 수 있는 시간이라면 집계 마감 관련 처리를 합니다
+            if (user.PlaySession.GameEndAt <= now)
+                user.PlaySession.ReserveClose();
         
-            return this.Json(new GameEndResponse()
+            return this.Json(new GameEndResponse
             {
                 CurrentTick = now.Ticks,
             });
@@ -222,10 +231,12 @@ public class ToriController : Controller
                 default:
                     throw new InvalidOperationException(resultCode.ToString());
             }
+            
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft) return this.Conflict();
 
-            resultCode = SessionManager.I.TryLeave(user!, isQuit: true);
+            resultCode = SessionManager.I.TryLeave(user, isQuit: true);
 
-            if (resultCode != ResultCode.Ok || user?.HasQuit != true)
+            if (resultCode != ResultCode.Ok || user.HasQuit != true)
                 throw new InvalidOperationException(resultCode.ToString());
 
             return this.Ok();
@@ -269,7 +280,7 @@ public class ToriController : Controller
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
-            if (user?.PlaySession == null) return this.Conflict();
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft) return this.Conflict();
 
             // 게임 플레이 시간보다 쿠폰 소지 시간이 더 길 수는 없습니다
             var now = DateTime.UtcNow;
@@ -310,7 +321,7 @@ public class ToriController : Controller
     
     [HttpPost]
     [Route("result")]
-    [SwaggerOperation("게임 최종 랭킹 결과 조회 (WIP)", "(WIP)")]
+    [SwaggerOperation("게임 최종 랭킹 결과 조회", "집계가 완료된 최종 랭킹 정보를 조회합니다.")]
     [SwaggerResponse(StatusCodes.Status102Processing, "아직 계산이 완료되지 않았습니다. 다시 시도해주세요.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
@@ -338,9 +349,11 @@ public class ToriController : Controller
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
-            if (user?.PlaySession == null) return this.Conflict();
+            if (user?.PlaySession == null || !user.HasJoined || user.HasQuit) return this.Conflict();
             
-            //TODO: 랭킹 집계가 완료되지 않았으면 Processing을 반환해야 함
+            var now = DateTime.UtcNow;
+            if (user.PlaySession.CloseAt == null || user.PlaySession.CloseAt < now)
+                return this.StatusCode(StatusCodes.Status102Processing);
             
             resultCode = user.PlaySession.TryGetRanking(user.Identifier, out var first, out var mine);
             if (resultCode != ResultCode.Ok) return this.Conflict();
@@ -368,8 +381,7 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
-            this.logger.LogCritical(e,
-                "API HAS EXCEPTION - result [token : {token}", req.Token);
+            this.logger.LogCritical(e, "API HAS EXCEPTION - result [token : {token}", req.Token);
             return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
         }
     }
