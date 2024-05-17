@@ -10,4 +10,6 @@ public record struct LoadingBody
     
     [SwaggerSchema("플레이어 닉네임", Nullable = false)]
     public string UserNickname { get; init; }
+    
+    public int RoomId { get; init; }
 }

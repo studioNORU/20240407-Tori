@@ -1,5 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using tori.Models;
+﻿using tori.Models;
 using tori.Sessions;
 
 namespace tori.Core;

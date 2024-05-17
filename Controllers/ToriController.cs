@@ -23,6 +23,10 @@ public class ToriController : Controller
     }
     
     // https://bold-meadow-582767.postman.co/workspace/meow~e50fbf18-f4b7-4c0d-a1b2-e0e2d151e54d/request/23935028-f9bcafb7-b36c-4f44-8ac2-4f5244a6bca4
+    // - [ ] 게임 정보 기록할 DB 테이블 구성
+    // - [ ] 게임 방 정보 앱 서버로부터 가져오기
+    // - [ ] 로딩 API에 추가한 값 앱 서버로부터 가져오기
+    // - [ ] 에너지 및 아이템 차감 처리하기
 
     [HttpPost]
     [Route("loading")]
@@ -221,7 +225,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GameQuit([FromBody] AuthBody req)
+    public async Task<IActionResult> GameQuit([FromBody] PlayInfoBody req)
     {
         try
         {
@@ -261,6 +265,14 @@ public class ToriController : Controller
                 "API HAS EXCEPTION - gamequit [token : {token}]", req.Token);
             return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
         }
+    }
+
+    [HttpPost]
+    [Route("play-data")]
+    [SwaggerOperation("게임 기록 (WIP)", "(WIP)")]
+    public async Task<IActionResult> PlayData([FromBody] PlayInfoBody req)
+    {
+        return this.Ok();
     }
     
     [HttpPost]

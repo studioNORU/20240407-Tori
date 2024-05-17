@@ -17,7 +17,12 @@ public record LoadingResponse : BaseResponse
     
     [SwaggerSchema("플레이어가 속한 스테이지의 ID입니다.", Nullable = false)]
     public string StageId { get; init; } = default!;
-    
+
+    public string UserNickname { get; init; } = default!;
+    public int Energy { get; init; }
+    public int WinnerCount { get; init; }
+    public Dictionary<string, int> Items { get; init; } = default!;
+
     [SwaggerSchema("게임 경품 정보", Nullable = false)]
     public GameReward GameReward { get; init; } = default!;
 
