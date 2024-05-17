@@ -21,6 +21,8 @@ public class ToriController : Controller
         this.logger = logger;
         this.dbContext = dbContext;
     }
+    
+    // https://bold-meadow-582767.postman.co/workspace/meow~e50fbf18-f4b7-4c0d-a1b2-e0e2d151e54d/request/23935028-f9bcafb7-b36c-4f44-8ac2-4f5244a6bca4
 
     [HttpPost]
     [Route("loading")]
