@@ -20,9 +20,9 @@ public class GameUser
     
     public PlayStatus Status { get; set; }
     
-    public DateTime JoinedAt { get; set; }
+    public DateTime? JoinedAt { get; set; }
     
-    public DateTime LeavedAt { get; set; }
+    public DateTime? LeavedAt { get; set; }
 
     public GamePlayData? PlayData { get; set; }
 }

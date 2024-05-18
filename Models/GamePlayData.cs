@@ -9,9 +9,9 @@ public class GamePlayData
     
     public int UserId { get; set; }
     
-    public GameUser GameUser { get; set; } = default!;
-
     public string UseItems { get; set; } = default!;
     
     public DateTime TimeStamp { get; set; }
+    
+    public GameUser GameUser { get; set; } = default!;
 }
