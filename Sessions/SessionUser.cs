@@ -1,4 +1,6 @@
-﻿namespace tori.Sessions;
+﻿using tori.AppApi.Model;
+
+namespace tori.Sessions;
 
 public class SessionUser
 {
@@ -6,6 +8,7 @@ public class SessionUser
     public readonly DateTime JoinedAt;
 
     public GameSession? PlaySession { get; private set; }
+    public UserInfo UserInfo { get; set; } = default!;
     public bool HasJoined { get; set; }
     public bool HasQuit { get; set; }
     public bool HasLeft { get; set; }

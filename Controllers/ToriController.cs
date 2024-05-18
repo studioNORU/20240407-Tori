@@ -30,8 +30,8 @@ public class ToriController : Controller
     
     // https://bold-meadow-582767.postman.co/workspace/meow~e50fbf18-f4b7-4c0d-a1b2-e0e2d151e54d/request/23935028-f9bcafb7-b36c-4f44-8ac2-4f5244a6bca4
     // - [x] 게임 정보 기록할 DB 테이블 구성
-    // - [ ] 게임 방 정보 앱 서버로부터 가져오기
-    // - [ ] 로딩 API에 추가한 값 앱 서버로부터 가져오기
+    // - [x] 게임 방 정보 앱 서버로부터 가져오기
+    // - [x] 로딩 API에 추가한 값 앱 서버로부터 가져오기
     // - [ ] 에너지 및 아이템 차감 처리하기
     // - [ ] 1분 간 게임 기록 API 호출이 없는 유저 이탈 처리하기
 
@@ -44,15 +44,13 @@ public class ToriController : Controller
     public async Task<IActionResult> Loading([FromBody] LoadingBody req)
     {
         if (string.IsNullOrWhiteSpace(req.UserId)) return this.BadRequest();
-        if (string.IsNullOrWhiteSpace(req.UserNickname)) return this.BadRequest();
 
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
-            //TODO: 실제 RoomId를 사용해야 합니다.
             var roomInfo = await this.apiClient.GetAsync<RoomInfo>(API_URL.RoomInfo, new Dictionary<string, string>
             {
-                { "roomId", "1" },
+                { "roomId", req.RoomId.ToString() },
             });
 
             if (roomInfo == null)
@@ -67,7 +65,7 @@ public class ToriController : Controller
                 throw new InvalidOperationException("Cannot found user info from APP API");
             
             var resultCode =
-                SessionManager.I.TryJoin(new UserIdentifier(req.UserId, req.UserNickname), roomInfo, this.dbContext,
+                SessionManager.I.TryJoin(new UserIdentifier(req.UserId, userInfo.Nickname), roomInfo, this.dbContext,
                     out var user, out var session);
 
             switch (resultCode)
@@ -84,6 +82,20 @@ public class ToriController : Controller
             }
 
             if (user == null) throw new InvalidOperationException("User is null");
+            user.UserInfo = userInfo;
+
+            var duplicates = await this.dbContext.GameUsers.CountAsync(u =>
+                u.RoomId == session.RoomId
+                && u.UserId == user.UserId
+                && u.Status != PlayStatus.Disconnected
+                && u.Status != PlayStatus.Quit);
+
+            if (0 < duplicates)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
+            
             await this.dbContext.GameUsers.AddAsync(new GameUser
             {
                 RoomId = session.RoomId,
@@ -101,7 +113,7 @@ public class ToriController : Controller
 
             return this.Json(new LoadingResponse
             {
-                Token = JwtToken.ToToken(req.UserId, req.UserNickname, session.RoomId),
+                Token = JwtToken.ToToken(req.UserId, userInfo.Nickname, session.RoomId),
                 Constants = constants,
                 RoomId = session.RoomId,
                 StageId = session.StageId,
@@ -109,15 +121,7 @@ public class ToriController : Controller
                 Energy = userInfo.Energy,
                 WinnerCount = userInfo.WinCount,
                 Items = userInfo.Inventory.ToDictionary(i => i.ItemNo.ToString(), i => i.ItemCount),
-                GameReward = new GameReward
-                {
-                    Price = roomInfo.GoodsInfo.Price,
-                    BrandId = roomInfo.GoodsInfo.BrandId,
-                    GoodsId = roomInfo.GoodsInfo.GoodsId,
-                    BrandName = roomInfo.GoodsInfo.BrandName,
-                    GoodsName = roomInfo.GoodsInfo.GoodsName,
-                    RewardImage = roomInfo.GoodsInfo.ImgUrl
-                },
+                GameReward = roomInfo.GoodsInfo.ToReward(),
                 GameStartUtc = session.GameStartAt.Ticks,
                 GameEndUtc = session.GameEndAt.Ticks,
                 CurrentTick = DateTime.UtcNow.Ticks,
@@ -126,8 +130,8 @@ public class ToriController : Controller
         catch (Exception e)
         {
             await transaction.RollbackAsync();
-            this.logger.LogCritical(e, "API HAS EXCEPTION - loading [userId : {userId}, userNickname : {userNickname}]",
-                req.UserId, req.UserNickname);
+            this.logger.LogCritical(e, "API HAS EXCEPTION - loading [userId : {userId}, roomId : {roomId}]",
+                req.UserId, req.RoomId);
             return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
         }
         finally
@@ -193,7 +197,7 @@ public class ToriController : Controller
                 return this.StatusCode(StatusCodes.Status408RequestTimeout);
             }
 
-            var gameUser = await this.dbContext.GameUsers.FirstOrDefaultAsync(u =>
+            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
                 u.RoomId == user.PlaySession.RoomId
                 && u.UserId == user.UserId);
             
@@ -279,7 +283,7 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
-            var gameUser = await this.dbContext.GameUsers.FirstOrDefaultAsync(u =>
+            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
                 u.RoomId == user.PlaySession.RoomId
                 && u.UserId == user.UserId);
             
@@ -376,7 +380,7 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
-            var gameUser = await this.dbContext.GameUsers.FirstOrDefaultAsync(u =>
+            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
                 u.RoomId == user.PlaySession.RoomId
                 && u.UserId == user.UserId);
             
@@ -421,7 +425,7 @@ public class ToriController : Controller
 
     [HttpPost]
     [Route("play-data")]
-    [SwaggerOperation("게임 기록 (WIP)", "(WIP)")]
+    [SwaggerOperation("게임 기록", "게임 플레이 중 소모한 에너지와 아이템 정보를 기록합니다.")]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK)]
@@ -455,7 +459,7 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
-            var gameUser = await this.dbContext.GameUsers.FirstOrDefaultAsync(u =>
+            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
                 u.RoomId == user.PlaySession.RoomId
                 && u.UserId == user.UserId);
             

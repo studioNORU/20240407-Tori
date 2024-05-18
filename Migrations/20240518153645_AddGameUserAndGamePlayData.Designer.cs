@@ -12,8 +12,8 @@ using tori.Core;
 namespace tori.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20240518100458_NullableGameUserDatetime")]
-    partial class NullableGameUserDatetime
+    [Migration("20240518153645_AddGameUserAndGamePlayData")]
+    partial class AddGameUserAndGamePlayData
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -40,10 +40,13 @@ namespace tori.Migrations
 
             modelBuilder.Entity("tori.Models.GamePlayData", b =>
                 {
-                    b.Property<int>("RoomId")
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    b.Property<int>("UserId")
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("RoomId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("TimeStamp")
@@ -53,7 +56,13 @@ namespace tori.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
-                    b.HasKey("RoomId", "UserId");
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomId", "UserId")
+                        .IsUnique();
 
                     b.ToTable("PlayData");
                 });
@@ -80,11 +89,11 @@ namespace tori.Migrations
 
             modelBuilder.Entity("tori.Models.GameUser", b =>
                 {
-                    b.Property<int>("RoomId")
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("JoinedAt")
                         .HasColumnType("datetime(6)");
@@ -92,10 +101,18 @@ namespace tori.Migrations
                     b.Property<DateTime?>("LeavedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<int>("RoomId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.HasKey("RoomId", "UserId");
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomId", "UserId");
 
                     b.ToTable("GameUsers");
                 });
@@ -105,6 +122,7 @@ namespace tori.Migrations
                     b.HasOne("tori.Models.GameUser", "GameUser")
                         .WithOne("PlayData")
                         .HasForeignKey("tori.Models.GamePlayData", "RoomId", "UserId")
+                        .HasPrincipalKey("tori.Models.GameUser", "RoomId", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

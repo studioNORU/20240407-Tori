@@ -1,4 +1,6 @@
 ﻿using System.Net.Http.Headers;
+using System.Net.Security;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
 using tori.AppApi.Model;
@@ -8,34 +10,28 @@ namespace tori.AppApi;
 public class ApiClient
 {
     private readonly HttpClient client;
-    private readonly JsonSerializerOptions defaultJsonSerializerOptions = new()
+    private readonly JsonSerializerOptions serializerOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNamingPolicy = new JsonCamelToSnakePolicy(),
         PropertyNameCaseInsensitive = true
-    };
-    private readonly Dictionary<Type, JsonSerializerOptions> jsonSerializerOptions = new()
-    {
-        {
-            typeof(GoodsInfo),
-            new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseUpper,
-                PropertyNameCaseInsensitive = true
-            }
-        },
-        {
-            typeof(ItemInfo),
-            new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                PropertyNameCaseInsensitive = true
-            }
-        },
     };
 
     public ApiClient()
     {
-        this.client = new HttpClient
+        var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (msg, cert, chain, sslPolicyErrors) =>
+            {
+                if (sslPolicyErrors == SslPolicyErrors.None) return true;
+                
+                //NOTE: 개발용 API 서버의 인증서 문제가 있어 해당 인증서에 대해서만 인증서 관련 오류를 무시하도록 합니다.
+                return cert?.GetCertHashString(HashAlgorithmName.SHA256).Equals(
+                    "59a8356662f1e995978cd92bceb3282b0b5ece9c8dedb069808a219227306304",
+                    StringComparison.InvariantCultureIgnoreCase) == true;
+            }
+        };
+        
+        this.client = new HttpClient(handler)
         {
             BaseAddress = new Uri(API_URL.BaseUrl)
         };
@@ -58,9 +54,7 @@ public class ApiClient
     public async Task<T?> GetAsync<T>(string endpoint, Dictionary<string, string>? queryParams = null) where T : class
     {
         var json = await this.GetAsync(endpoint, queryParams);
-        var options = this.jsonSerializerOptions.GetValueOrDefault(typeof(T)) ?? this.defaultJsonSerializerOptions;
-
-        var res = JsonSerializer.Deserialize<ApiResponse<T>>(json, options);
+        var res = JsonSerializer.Deserialize<ApiResponse<T>>(json, this.serializerOptions);
         return res?.Info;
     }
 
@@ -74,9 +68,7 @@ public class ApiClient
     public async Task<T?> PostAsync<T>(string endpoint, HttpContent content) where T : class
     {
         var json = await this.PostAsync(endpoint, content);
-        var options = this.jsonSerializerOptions.GetValueOrDefault(typeof(T)) ?? this.defaultJsonSerializerOptions;
-
-        var res = JsonSerializer.Deserialize<ApiResponse<T>>(json, options);
+        var res = JsonSerializer.Deserialize<ApiResponse<T>>(json, this.serializerOptions);
         return res?.Info;
     }
 }

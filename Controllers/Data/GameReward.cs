@@ -10,9 +10,9 @@ public record GameReward
     
     [SwaggerSchema("브랜드 ID", Nullable = false)]
     public int BrandId { get; init; }
-    
+
     [SwaggerSchema("상품 ID", Nullable = false)]
-    public int GoodsId { get; init; }
+    public string GoodsId { get; init; } = default!;
 
     [SwaggerSchema("브랜드명", Nullable = false)]
     public string BrandName { get; init; } = default!;

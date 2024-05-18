@@ -1,10 +1,14 @@
-﻿namespace tori.AppApi.Model;
+﻿using System.Text.Json.Serialization;
+
+namespace tori.AppApi.Model;
 
 public record RoomInfo(
     int RoomId,
     int PlayerCount,
-    GoodsInfo GoodsInfo,
-    DateTime ExposureDay,
-    DateTime BeginRunningTime,
-    DateTime EndRunningTime,
-    int PlayTime);
+    [property: JsonConverter(typeof(JsonStringConverter<GoodsInfo>))] GoodsInfo GoodsInfo,
+    [property: JsonConverter(typeof(JsonDateTimeConverter))] DateTime ExposureDay,
+    [property: JsonConverter(typeof(JsonDateTimeConverter))] DateTime BeginRunningTime,
+    [property: JsonConverter(typeof(JsonDateTimeConverter))] DateTime EndRunningTime,
+    int PlayTime)
+{
+}

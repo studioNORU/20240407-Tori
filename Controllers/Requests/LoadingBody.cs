@@ -8,8 +8,6 @@ public record struct LoadingBody
     [SwaggerSchema("플레이어 ID", Nullable = false)]
     public string UserId { get; init; }
     
-    [SwaggerSchema("플레이어 닉네임", Nullable = false)]
-    public string UserNickname { get; init; }
-    
+    [SwaggerSchema("플레이할 방 ID", Nullable = false)]
     public int RoomId { get; init; }
 }

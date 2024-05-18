@@ -34,7 +34,7 @@ public class SessionManager
             var session = this.sessions.Values.FirstOrDefault(s => s.RoomId == roomInfo.RoomId && s.CanAcceptUser());
             if (session != null) return session;
 
-            session = this.sessions.Values.FirstOrDefault(s => s.IsReusable());
+            session = this.sessions.Values.FirstOrDefault(s => s.RoomId == roomInfo.RoomId && s.IsReusable());
             if (session != null)
             {
                 var stage = SelectStage(dbContext);
@@ -103,6 +103,7 @@ public class SessionManager
     /// 세션에 새 유저를 입장시킵니다
     /// </summary>
     /// <param name="identifier">입장하는 유저의 식별 정보</param>
+    /// <param name="roomInfo">입장할 방 정보</param>
     /// <param name="dbContext">DB 컨텍스트</param>
     /// <param name="user">입장한 유저 정보</param>
     /// <param name="session">유저가 입장한 세션</param>
