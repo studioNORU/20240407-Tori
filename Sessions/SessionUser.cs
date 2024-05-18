@@ -4,6 +4,7 @@ public class SessionUser
 {
     public readonly UserIdentifier Identifier;
     public readonly DateTime JoinedAt;
+    public readonly int UserId;
 
     public GameSession? PlaySession { get; private set; }
     public bool HasJoined { get; set; }
@@ -15,6 +16,7 @@ public class SessionUser
     {
         this.Identifier = identifier;
         this.JoinedAt = joinedAt;
+        this.UserId = int.Parse(identifier.Id);
     }
 
     /// <summary>

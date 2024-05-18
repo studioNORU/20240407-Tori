@@ -5,7 +5,7 @@ namespace tori.Sessions;
 
 public class GameSession
 {
-    public uint SessionId { get; }
+    public uint RoomId { get; }
     public string StageId { get; }
 
     private SpinLock spinLock;
@@ -29,9 +29,9 @@ public class GameSession
     public DateTime GameEndAt { get; private set; } = DateTime.MaxValue;
     public DateTime? CloseAt { get; private set; }
 
-    public GameSession(uint sessionId, GameStage stage)
+    public GameSession(uint roomId, GameStage stage)
     {
-        this.SessionId = sessionId;
+        this.RoomId = roomId;
         this.StageId = stage.StageId;
         this.maxUserLimits = stage.MaxPlayer;
     }
@@ -149,16 +149,18 @@ public class GameSession
     /// 세션에 새 유저를 입장시킵니다 (<see cref="SessionManager">SessionManager</see>를 통해 접근해야 합니다)
     /// </summary>
     /// <param name="identifier">입장하는 유저의 식별 정보</param>
-    public ResultCode JoinUser(UserIdentifier identifier)
+    /// <param name="user">입장한 유저 정보</param>
+    public ResultCode JoinUser(UserIdentifier identifier, out SessionUser? user)
     {
         var lockTaken = false;
         try
         {
             this.spinLock.Enter(ref lockTaken);
-            
+
+            user = null;
             if (this.activeUsers.Any(u => u.IsSame(identifier))) return ResultCode.AlreadyJoined;
 
-            var user = this.users.FirstOrDefault(u => u.IsSame(identifier));
+            user = this.users.FirstOrDefault(u => u.IsSame(identifier));
             
             // 신규 유저
             if (user == null && InternalCanAcceptUser())

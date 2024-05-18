@@ -5,6 +5,7 @@ using Tori.Controllers.Data;
 using Tori.Controllers.Requests;
 using tori.Controllers.Responses;
 using tori.Core;
+using tori.Models;
 using tori.Sessions;
 
 namespace Tori.Controllers;
@@ -39,31 +40,47 @@ public class ToriController : Controller
         if (string.IsNullOrWhiteSpace(req.UserId)) return this.BadRequest();
         if (string.IsNullOrWhiteSpace(req.UserNickname)) return this.BadRequest();
 
+        var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
             var resultCode =
-                SessionManager.I.TryJoin(new UserIdentifier(req.UserId, req.UserNickname), this.dbContext, out var session);
-            
+                SessionManager.I.TryJoin(new UserIdentifier(req.UserId, req.UserNickname), this.dbContext, out var user,
+                    out var session);
+
             switch (resultCode)
             {
                 case ResultCode.Ok:
                     break;
-                
+
                 case ResultCode.AlreadyJoined:
+                    await transaction.RollbackAsync();
                     return this.Conflict();
                 case ResultCode.UnhandledError:
                 default:
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
+            if (user == null) throw new InvalidOperationException("User is null");
+            var gameUser = await this.dbContext.GameUsers.AddAsync(new GameUser
+            {
+                RoomId = (int)session.RoomId,
+                UserId = user.UserId,
+                Status = PlayStatus.Ready,
+                JoinedAt = user.JoinedAt,
+                LeavedAt = null,
+                PlayData = null,
+            });
+
             var constants = await this.dbContext.GameConstants
                 .ToDictionaryAsync(x => x.Key, x => x.Value);
-            
+
+            await transaction.CommitAsync();
+
             return this.Json(new LoadingResponse
             {
-                Token = JwtToken.ToToken(req.UserId, req.UserNickname, session.SessionId),
+                Token = JwtToken.ToToken(req.UserId, req.UserNickname, session.RoomId),
                 Constants = constants,
-                RoomId = (int)session.SessionId,
+                RoomId = gameUser.Entity.RoomId,
                 StageId = session.StageId,
                 //TODO: 실제 데이터를 사용해야 함
                 GameReward = new GameReward
@@ -78,9 +95,14 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
+            await transaction.RollbackAsync();
             this.logger.LogCritical(e, "API HAS EXCEPTION - loading [userId : {userId}, userNickname : {userNickname}]",
                 req.UserId, req.UserNickname);
             return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
+        finally
+        {
+            await transaction.DisposeAsync();
         }
     }
 
@@ -106,6 +128,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameStartResponse))]
     public async Task<IActionResult> GameStart([FromBody] AuthBody req)
     {
+        var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
             var (resultCode, user) = await ValidateToken(req.Token);
@@ -114,31 +137,60 @@ public class ToriController : Controller
             {
                 case ResultCode.Ok:
                     break;
-            
+
                 case ResultCode.InvalidParameter:
+                    await transaction.RollbackAsync();
                     return this.Unauthorized();
                 case ResultCode.SessionNotFound:
                 case ResultCode.NotJoinedUser:
+                    await transaction.RollbackAsync();
                     return this.Conflict();
                 case ResultCode.UnhandledError:
                 default:
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
-            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft) return this.Conflict();
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
 
             var now = DateTime.UtcNow;
-            if (now < user.PlaySession.GameStartAt) return this.StatusCode(StatusCodes.Status408RequestTimeout);
+            if (now < user.PlaySession.GameStartAt)
+            {
+                await transaction.RollbackAsync();
+                return this.StatusCode(StatusCodes.Status408RequestTimeout);
+            }
+
+            var gameUser = await this.dbContext.GameUsers.FirstOrDefaultAsync(u =>
+                u.RoomId == user.PlaySession.RoomId
+                && u.UserId == user.UserId);
+            
+            if (gameUser == null) throw new InvalidOperationException("Cannot found game user from DB");
+            if (gameUser.Status != PlayStatus.Ready)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
 
             resultCode = SessionManager.I.Start(user);
 
             if (resultCode != ResultCode.Ok)
             {
                 if (resultCode is ResultCode.SessionNotFound or ResultCode.NotJoinedUser or ResultCode.AlreadyJoined)
+                {
+                    await transaction.RollbackAsync();
                     return this.Conflict();
+                }
+                
                 throw new InvalidOperationException(resultCode.ToString());
             }
-        
+
+            gameUser.Status = PlayStatus.Playing;
+            this.dbContext.GameUsers.Update(gameUser);
+
+            await transaction.CommitAsync();
             return this.Json(new GameStartResponse
             {
                 PlayerNicknames = user.PlaySession!.GetNicknames().ToArray(),
@@ -147,8 +199,13 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
+            await transaction.RollbackAsync();
             this.logger.LogCritical(e, "API HAS EXCEPTION - gamestart [token : {token}]", req.Token);
             return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
+        finally
+        {
+            await transaction.DisposeAsync();
         }
     }
     
@@ -161,50 +218,79 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameEndResponse))]
     public async Task<IActionResult> GameEnd([FromBody] PlayInfoBody req)
     {
+        if (req.HostTime < 0) return this.BadRequest();
+        if (req.ItemCount < 0) return this.BadRequest();
+
+        var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
-            if (req.HostTime < 0) return this.BadRequest();
-            if (req.ItemCount < 0) return this.BadRequest();
-
             var (resultCode, user) = await ValidateToken(req.Token);
 
             switch (resultCode)
             {
                 case ResultCode.Ok:
                     break;
-            
+
                 case ResultCode.InvalidParameter:
+                    await transaction.RollbackAsync();
                     return this.Unauthorized();
                 case ResultCode.SessionNotFound:
                 case ResultCode.NotJoinedUser:
+                    await transaction.RollbackAsync();
                     return this.Conflict();
                 case ResultCode.UnhandledError:
                 default:
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
-            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft) return this.Conflict();
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
+
+            var gameUser = await this.dbContext.GameUsers.FirstOrDefaultAsync(u =>
+                u.RoomId == user.PlaySession.RoomId
+                && u.UserId == user.UserId);
             
+            if (gameUser == null) throw new InvalidOperationException("Cannot found game user from DB");
+            if (gameUser.Status != PlayStatus.Playing)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
+
             // 게임 플레이 시간보다 쿠폰 소지 시간이 더 길 수는 없습니다
             var now = DateTime.UtcNow;
             if ((now - user.PlaySession.GameStartAt).TotalSeconds < req.HostTime)
+            {
+                await transaction.RollbackAsync();
                 return this.BadRequest();
-            
+            }
+
             _ = user.PlaySession.UpdateRanking(user.Identifier, req.HostTime, req.ItemCount);
-            
+
             resultCode = SessionManager.I.TryLeave(user, isQuit: false);
 
             if (resultCode != ResultCode.Ok)
             {
                 if (resultCode is ResultCode.SessionNotFound or ResultCode.NotJoinedUser)
+                {
+                    await transaction.RollbackAsync();
                     return this.Conflict();
+                }
                 throw new InvalidOperationException(resultCode.ToString());
             }
 
             // 최종 집계를 진행할 수 있는 시간이라면 집계 마감 관련 처리를 합니다
             if (user.PlaySession.GameEndAt <= now)
                 user.PlaySession.ReserveClose();
-        
+
+            gameUser.Status = PlayStatus.Done;
+            gameUser.LeavedAt = DateTime.UtcNow;
+            this.dbContext.GameUsers.Update(gameUser);
+            await transaction.CommitAsync();
+            
             return this.Json(new GameEndResponse
             {
                 CurrentTick = now.Ticks,
@@ -212,10 +298,15 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
+            await transaction.RollbackAsync();
             this.logger.LogCritical(e,
                 "API HAS EXCEPTION - gameend [token : {token}, hostTime : {hostTime}, itemCount : {itemCount}]",
                 req.Token, req.HostTime, req.ItemCount);
             return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
+        finally
+        {
+            await transaction.DisposeAsync();
         }
     }
     
@@ -227,6 +318,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> GameQuit([FromBody] PlayInfoBody req)
     {
+        var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
             var (resultCode, user) = await ValidateToken(req.Token);
@@ -235,35 +327,65 @@ public class ToriController : Controller
             {
                 case ResultCode.Ok:
                     break;
-            
+
                 case ResultCode.InvalidParameter:
+                    await transaction.RollbackAsync();
                     return this.Unauthorized();
                 case ResultCode.SessionNotFound:
                 case ResultCode.NotJoinedUser:
+                    await transaction.RollbackAsync();
                     return this.Conflict();
                 case ResultCode.UnhandledError:
                 default:
                     throw new InvalidOperationException(resultCode.ToString());
             }
+
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
+
+            var gameUser = await this.dbContext.GameUsers.FirstOrDefaultAsync(u =>
+                u.RoomId == user.PlaySession.RoomId
+                && u.UserId == user.UserId);
             
-            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft) return this.Conflict();
+            if (gameUser == null) throw new InvalidOperationException("Cannot found game user from DB");
+            if (gameUser.Status != PlayStatus.Playing)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
 
             resultCode = SessionManager.I.TryLeave(user, isQuit: true);
 
             if (resultCode != ResultCode.Ok || user.HasQuit != true)
             {
                 if (resultCode is ResultCode.SessionNotFound or ResultCode.NotJoinedUser)
+                {
+                    await transaction.RollbackAsync();
                     return this.Conflict();
+                }
                 throw new InvalidOperationException(resultCode.ToString());
             }
+
+            gameUser.Status = PlayStatus.Quit;
+            gameUser.LeavedAt = DateTime.UtcNow;
+            this.dbContext.GameUsers.Update(gameUser);
+            await transaction.CommitAsync();
 
             return this.Ok();
         }
         catch (Exception e)
         {
+            await transaction.RollbackAsync();
             this.logger.LogCritical(e,
                 "API HAS EXCEPTION - gamequit [token : {token}]", req.Token);
             return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
+        finally
+        {
+            await transaction.DisposeAsync();
         }
     }
 
@@ -321,7 +443,7 @@ public class ToriController : Controller
                 {
                     UserId = mine.Identifier.Id,
                     UserNickname = mine.Identifier.Nickname,
-                    RoomId = (int)user.PlaySession.SessionId,
+                    RoomId = (int)user.PlaySession.RoomId,
                     Ranking = mine.Ranking,
                     HostTime = mine.HostTime,
                 },
@@ -329,7 +451,7 @@ public class ToriController : Controller
                 {
                     UserId = first.Identifier.Id,
                     UserNickname = first.Identifier.Nickname,
-                    RoomId = (int)user.PlaySession.SessionId,
+                    RoomId = (int)user.PlaySession.RoomId,
                     Ranking = first.Ranking,
                     HostTime = first.HostTime
                 },
@@ -390,7 +512,7 @@ public class ToriController : Controller
                 {
                     UserId = mine.Identifier.Id,
                     UserNickname = mine.Identifier.Nickname,
-                    RoomId = (int)user.PlaySession.SessionId,
+                    RoomId = (int)user.PlaySession.RoomId,
                     Ranking = mine.Ranking,
                     HostTime = mine.HostTime,
                 },
@@ -398,7 +520,7 @@ public class ToriController : Controller
                 {
                     UserId = first.Identifier.Id,
                     UserNickname = first.Identifier.Nickname,
-                    RoomId = (int)user.PlaySession.SessionId,
+                    RoomId = (int)user.PlaySession.RoomId,
                     Ranking = first.Ranking,
                     HostTime = first.HostTime
                 },

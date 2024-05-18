@@ -109,11 +109,12 @@ public class SessionManager
     /// </summary>
     /// <param name="identifier">입장하는 유저의 식별 정보</param>
     /// <param name="dbContext">DB 컨텍스트</param>
+    /// <param name="user">입장한 유저 정보</param>
     /// <param name="session">유저가 입장한 세션</param>
-    public ResultCode TryJoin(UserIdentifier identifier, AppDbContext dbContext, out GameSession session)
+    public ResultCode TryJoin(UserIdentifier identifier, AppDbContext dbContext, out SessionUser? user, out GameSession session)
     {
         session = this.GetResumableSession(identifier) ?? this.GetActiveSession(dbContext);
-        return session.JoinUser(identifier);
+        return session.JoinUser(identifier, out user);
     }
 
     /// <summary>
