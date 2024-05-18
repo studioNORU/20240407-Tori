@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<GameConstant> GameConstants { get; set; } = default!;
     public DbSet<GameStage> GameStages { get; set; } = default!;
     public DbSet<GameUser> GameUsers { get; set; } = default!;
+    public DbSet<GamePlayData> PlayData { get; set; } = default!;
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -24,5 +25,14 @@ public class AppDbContext : DbContext
 
         var connection = new MySqlConnection(builder.ConnectionString);
         optionsBuilder.UseMySql(connection, ServerVersion.AutoDetect(connection));
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<GameUser>()
+            .HasOne(e => e.PlayData)
+            .WithOne(e => e.GameUser)
+            .HasForeignKey<GamePlayData>(e => new { e.RoomId, e.UserId })
+            .HasPrincipalKey<GameUser>(e => new { e.RoomId, e.UserId });
     }
 }
