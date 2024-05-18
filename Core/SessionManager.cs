@@ -1,4 +1,5 @@
-﻿using tori.Models;
+﻿using tori.AppApi.Model;
+using tori.Models;
 using tori.Sessions;
 
 namespace tori.Core;
@@ -13,12 +14,7 @@ public class SessionManager
     /// <summary>
     /// Require SpinLock to access
     /// </summary>
-    private uint nextSessionId = 1;
-    
-    /// <summary>
-    /// Require SpinLock to access
-    /// </summary>
-    private readonly Dictionary<uint, GameSession> sessions = new();
+    private readonly Dictionary<int, GameSession> sessions = new();
     
     public static GameStage SelectStage(AppDbContext dbContext)
     {
@@ -28,21 +24,21 @@ public class SessionManager
             .First();
     }
     
-    private GameSession GetActiveSession(AppDbContext dbContext)
+    private GameSession GetActiveSession(AppDbContext dbContext, RoomInfo roomInfo)
     {
         var lockTaken = false;
         try
         {
             this.spinLock.Enter(ref lockTaken);
             
-            var session = this.sessions.Values.FirstOrDefault(s => s.CanAcceptUser());
+            var session = this.sessions.Values.FirstOrDefault(s => s.RoomId == roomInfo.RoomId && s.CanAcceptUser());
             if (session != null) return session;
 
             session = this.sessions.Values.FirstOrDefault(s => s.IsReusable());
             if (session != null)
             {
                 var stage = SelectStage(dbContext);
-                session.SetActive(stage);
+                session.SetActive(roomInfo, stage);
                 return session;
             }
 
@@ -55,48 +51,47 @@ public class SessionManager
         
         GameSession CreateSession()
         {
-            var sessionId = this.nextSessionId++;
+            var roomId = roomInfo.RoomId;
             var stage = SelectStage(dbContext);
-            var session = new GameSession(sessionId, stage);
-            session.SetActive(stage);
-            this.sessions.Add(sessionId, session);
+            var session = new GameSession();
+            session.SetActive(roomInfo, stage);
+            this.sessions.Add(roomId, session);
             return session;
         }
     }
 
-    private GameSession? GetResumableSession(UserIdentifier identifier)
+    private GameSession? GetResumableSession(AppDbContext dbContext, UserIdentifier identifier)
     {
         var lockTaken = false;
         try
         {
             this.spinLock.Enter(ref lockTaken);
 
-            foreach (var session in this.sessions.Values)
-            {
-                var now = DateTime.UtcNow;
-                
-                // 이 방이 초기화 후 재사용을 위해 대기 중인 상태라면 다른 방을 확인합니다
-                if (session.IsReusable())
-                    continue;
-                
-                // 이 방에서 유저 정보를 찾지 못했다면 다른 방을 확인합니다
-                if (session.TryGetUser(identifier, out var user) != ResultCode.Ok)
-                    continue;
-                
-                // 이 방에서 조회한 유저 정보로는 방에 진입한 기록을 찾을 수 없거나 포기한 것으로 확인되면 다른 방을 확인합니다
-                if (!user.HasJoined || user.HasQuit)
-                    continue;
-                
-                // 이 방에서 조회한 유저 정보로 할당된 방 정보를 확인할 수 없거나 이미 게임이 종료되었다면 다른 방을 확인합니다
-                if (user.PlaySession == null || user.PlaySession.CloseAt <= now)
-                    continue;
+            var gameUser = dbContext.GameUsers.FirstOrDefault(u =>
+                u.UserId == identifier.UserId
+                && u.Status == PlayStatus.Playing);
 
-                // 이 방에서 게임을 재개할 수 있다면 방 정보를 전달합니다
-                return session;
-            }
+            if (gameUser == null || !this.sessions.TryGetValue(gameUser.RoomId, out var session)) return null;
             
-            // 게임을 재개할 수 있는 방을 찾지 못했다면 null을 반환합니다
-            return null;
+            // 이 방이 초기화 후 재사용을 위해 대기 중인 상태라면 여기서 재개할 수 없습니다
+            if (session.IsReusable())
+                return null;
+            
+            // 이 방에서 유저 정보를 찾지 못했다면 여기서 재개할 수 없습니다
+            if (session.TryGetUser(identifier, out var user) != ResultCode.Ok)
+                return null;
+            
+            // 이 방에서 조회한 유저 정보로는 방에 진입한 기록을 찾을 수 없거나 포기한 것으로 확인되면 여기서 재개할 수 없습니다
+            if (!user.HasJoined || user.HasQuit)
+                return null;
+            
+            // 이 방에서 조회한 유저 정보로 할당된 방 정보를 확인할 수 없거나 이미 게임이 종료되었다면 여기서 재개할 수 없습니다
+            var now = DateTime.UtcNow;
+            if (user.PlaySession == null || user.PlaySession.CloseAt <= now)
+                return null;
+
+            // 이 방에서 게임을 재개할 수 있다면 방 정보를 전달합니다
+            return session;
         }
         finally
         {
@@ -111,9 +106,9 @@ public class SessionManager
     /// <param name="dbContext">DB 컨텍스트</param>
     /// <param name="user">입장한 유저 정보</param>
     /// <param name="session">유저가 입장한 세션</param>
-    public ResultCode TryJoin(UserIdentifier identifier, AppDbContext dbContext, out SessionUser? user, out GameSession session)
+    public ResultCode TryJoin(UserIdentifier identifier, RoomInfo roomInfo, AppDbContext dbContext, out SessionUser? user, out GameSession session)
     {
-        session = this.GetResumableSession(identifier) ?? this.GetActiveSession(dbContext);
+        session = this.GetResumableSession(dbContext, identifier) ?? this.GetActiveSession(dbContext, roomInfo);
         return session.JoinUser(identifier, out user);
     }
 

@@ -17,7 +17,7 @@ public static class JwtToken
     private static readonly SymmetricSecurityKey SymmetricSecurityKey = new(ByteSecretKey);
     private static readonly SigningCredentials Credentials = new(SymmetricSecurityKey, SecurityAlgorithms.HmacSha256Signature);
     
-    public static string ToToken(string userId, string nickname, uint sessionId)
+    public static string ToToken(string userId, string nickname, int sessionId)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
         var tokenDescriptor = new SecurityTokenDescriptor
@@ -64,7 +64,7 @@ public static class JwtToken
             var nickname = jwtToken.Claims.First(x => x.Type == NicknameKey).Value;
             var sessionIdStr = jwtToken.Claims.First(x => x.Type == SessionIdKey).Value;
 
-            if (!uint.TryParse(sessionIdStr, out var sessionId))
+            if (!int.TryParse(sessionIdStr, out var sessionId))
             {
                 throw new SecurityTokenException("InvalidToken");
             }
@@ -78,4 +78,4 @@ public static class JwtToken
     }
 }
 
-public record TokenData(UserIdentifier User, uint SessionId);
+public record TokenData(UserIdentifier User, int SessionId);

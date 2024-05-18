@@ -4,7 +4,6 @@ public class SessionUser
 {
     public readonly UserIdentifier Identifier;
     public readonly DateTime JoinedAt;
-    public readonly int UserId;
 
     public GameSession? PlaySession { get; private set; }
     public bool HasJoined { get; set; }
@@ -12,11 +11,12 @@ public class SessionUser
     public bool HasLeft { get; set; }
     public bool IsPlaying { get; set; }
 
+    public int UserId => this.Identifier.UserId;
+    
     public SessionUser(UserIdentifier identifier, DateTime joinedAt)
     {
         this.Identifier = identifier;
         this.JoinedAt = joinedAt;
-        this.UserId = int.Parse(identifier.Id);
     }
 
     /// <summary>
@@ -44,4 +44,7 @@ public class SessionUser
     public override int GetHashCode() => this.Identifier.Id.GetHashCode();
 }
 
-public record UserIdentifier(string Id, string Nickname);
+public record UserIdentifier(string Id, string Nickname)
+{
+    public readonly int UserId = int.Parse(Id);
+}

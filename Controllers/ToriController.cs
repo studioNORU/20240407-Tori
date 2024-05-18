@@ -2,6 +2,8 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
+using tori.AppApi;
+using tori.AppApi.Model;
 using Tori.Controllers.Data;
 using Tori.Controllers.Requests;
 using tori.Controllers.Responses;
@@ -17,11 +19,13 @@ public class ToriController : Controller
 {
     private readonly ILogger<ToriController> logger;
     private readonly AppDbContext dbContext;
+    private readonly ApiClient apiClient;
 
     public ToriController(ILogger<ToriController> logger, AppDbContext dbContext)
     {
         this.logger = logger;
         this.dbContext = dbContext;
+        this.apiClient = new ApiClient();
     }
     
     // https://bold-meadow-582767.postman.co/workspace/meow~e50fbf18-f4b7-4c0d-a1b2-e0e2d151e54d/request/23935028-f9bcafb7-b36c-4f44-8ac2-4f5244a6bca4
@@ -45,9 +49,26 @@ public class ToriController : Controller
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
+            //TODO: 실제 RoomId를 사용해야 합니다.
+            var roomInfo = await this.apiClient.GetAsync<RoomInfo>(API_URL.RoomInfo, new Dictionary<string, string>
+            {
+                { "roomId", "1" },
+            });
+
+            if (roomInfo == null)
+                throw new InvalidOperationException("Cannot found room info from APP API");
+
+            var userInfo = await this.apiClient.GetAsync<UserInfo>(API_URL.UserInfo, new Dictionary<string, string>
+            {
+                { "userNo", req.UserId },
+            });
+
+            if (userInfo == null)
+                throw new InvalidOperationException("Cannot found user info from APP API");
+            
             var resultCode =
-                SessionManager.I.TryJoin(new UserIdentifier(req.UserId, req.UserNickname), this.dbContext, out var user,
-                    out var session);
+                SessionManager.I.TryJoin(new UserIdentifier(req.UserId, req.UserNickname), roomInfo, this.dbContext,
+                    out var user, out var session);
 
             switch (resultCode)
             {
@@ -63,9 +84,9 @@ public class ToriController : Controller
             }
 
             if (user == null) throw new InvalidOperationException("User is null");
-            var gameUser = await this.dbContext.GameUsers.AddAsync(new GameUser
+            await this.dbContext.GameUsers.AddAsync(new GameUser
             {
-                RoomId = (int)session.RoomId,
+                RoomId = session.RoomId,
                 UserId = user.UserId,
                 Status = PlayStatus.Ready,
                 JoinedAt = user.JoinedAt,
@@ -82,13 +103,20 @@ public class ToriController : Controller
             {
                 Token = JwtToken.ToToken(req.UserId, req.UserNickname, session.RoomId),
                 Constants = constants,
-                RoomId = gameUser.Entity.RoomId,
+                RoomId = session.RoomId,
                 StageId = session.StageId,
-                //TODO: 실제 데이터를 사용해야 함
+                UserNickname = userInfo.Nickname,
+                Energy = userInfo.Energy,
+                WinnerCount = userInfo.WinCount,
+                Items = userInfo.Inventory.ToDictionary(i => i.ItemNo.ToString(), i => i.ItemCount),
                 GameReward = new GameReward
                 {
-                    RewardId = "TEST",
-                    RewardImage = "https://placehold.jp/150x150.png"
+                    Price = roomInfo.GoodsInfo.Price,
+                    BrandId = roomInfo.GoodsInfo.BrandId,
+                    GoodsId = roomInfo.GoodsInfo.GoodsId,
+                    BrandName = roomInfo.GoodsInfo.BrandName,
+                    GoodsName = roomInfo.GoodsInfo.GoodsName,
+                    RewardImage = roomInfo.GoodsInfo.ImgUrl
                 },
                 GameStartUtc = session.GameStartAt.Ticks,
                 GameEndUtc = session.GameEndAt.Ticks,
@@ -440,7 +468,7 @@ public class ToriController : Controller
 
             await this.dbContext.PlayData.AddAsync(new GamePlayData
             {
-                RoomId = (int)user.PlaySession.RoomId,
+                RoomId = user.PlaySession.RoomId,
                 UserId = user.UserId,
                 UseItems = JsonSerializer.Serialize(req.UsedItems),
                 TimeStamp = DateTime.UtcNow,
@@ -509,7 +537,7 @@ public class ToriController : Controller
                 {
                     UserId = mine.Identifier.Id,
                     UserNickname = mine.Identifier.Nickname,
-                    RoomId = (int)user.PlaySession.RoomId,
+                    RoomId = user.PlaySession.RoomId,
                     Ranking = mine.Ranking,
                     HostTime = mine.HostTime,
                 },
@@ -517,7 +545,7 @@ public class ToriController : Controller
                 {
                     UserId = first.Identifier.Id,
                     UserNickname = first.Identifier.Nickname,
-                    RoomId = (int)user.PlaySession.RoomId,
+                    RoomId = user.PlaySession.RoomId,
                     Ranking = first.Ranking,
                     HostTime = first.HostTime
                 },
@@ -578,7 +606,7 @@ public class ToriController : Controller
                 {
                     UserId = mine.Identifier.Id,
                     UserNickname = mine.Identifier.Nickname,
-                    RoomId = (int)user.PlaySession.RoomId,
+                    RoomId = user.PlaySession.RoomId,
                     Ranking = mine.Ranking,
                     HostTime = mine.HostTime,
                 },
@@ -586,7 +614,7 @@ public class ToriController : Controller
                 {
                     UserId = first.Identifier.Id,
                     UserNickname = first.Identifier.Nickname,
-                    RoomId = (int)user.PlaySession.RoomId,
+                    RoomId = user.PlaySession.RoomId,
                     Ranking = first.Ranking,
                     HostTime = first.HostTime
                 },

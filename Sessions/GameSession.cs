@@ -1,15 +1,16 @@
-﻿using tori.Core;
+﻿using tori.AppApi.Model;
+using tori.Core;
 using tori.Models;
 
 namespace tori.Sessions;
 
 public class GameSession
 {
-    public uint RoomId { get; }
-    public string StageId { get; }
+    public int RoomId => this.roomInfo.RoomId;
+    public string StageId { get; private set; } = default!;
 
     private SpinLock spinLock;
-    private readonly int maxUserLimits;
+    private RoomInfo roomInfo = default!;
     private readonly GameRanking ranking = new();
     
     /// <summary>
@@ -28,13 +29,6 @@ public class GameSession
     public DateTime GameStartAt { get; private set; } = DateTime.MaxValue;
     public DateTime GameEndAt { get; private set; } = DateTime.MaxValue;
     public DateTime? CloseAt { get; private set; }
-
-    public GameSession(uint roomId, GameStage stage)
-    {
-        this.RoomId = roomId;
-        this.StageId = stage.StageId;
-        this.maxUserLimits = stage.MaxPlayer;
-    }
     
     public IEnumerable<string> GetNicknames()
     {
@@ -50,12 +44,15 @@ public class GameSession
         }
     }
 
-    public void SetActive(GameStage stage)
+    public void SetActive(RoomInfo roomInfo, GameStage stage)
     {
         var lockTaken = false;
         try
         {
             this.spinLock.Enter(ref lockTaken);
+            
+            this.roomInfo = roomInfo;
+            this.StageId = stage.StageId;
             
             if (this.activeUsers.Count != 0) throw new InvalidOperationException();
             this.activeUsers.Clear();
@@ -64,8 +61,8 @@ public class GameSession
 
             var now = DateTime.UtcNow;
             this.CreatedAt = now;
-            this.GameStartAt = now.AddSeconds(Constants.SessionWaitingEntrySeconds);
-            this.GameEndAt = this.GameStartAt.AddMilliseconds(stage.Time);
+            this.GameStartAt = roomInfo.BeginRunningTime;
+            this.GameEndAt = this.roomInfo.EndRunningTime;
             this.CloseAt = null;
         }
         finally
@@ -89,7 +86,7 @@ public class GameSession
             this.spinLock.Enter(ref lockTaken);
             
             // 방에 입장 가능한 유저 수 제한을 지켜야 함
-            return this.activeUsers.Count < this.maxUserLimits;
+            return this.activeUsers.Count < this.roomInfo.PlayerCount;
         }
         finally
         {
@@ -206,7 +203,7 @@ public class GameSession
             // 이미 게임이 시작된 방에는 입장 불가
             if (this.GameStartAt <= now) return false;
 
-            return this.activeUsers.Count < this.maxUserLimits;
+            return this.activeUsers.Count < this.roomInfo.PlayerCount;
         }
     }
 
