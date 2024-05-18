@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
@@ -24,10 +25,11 @@ public class ToriController : Controller
     }
     
     // https://bold-meadow-582767.postman.co/workspace/meow~e50fbf18-f4b7-4c0d-a1b2-e0e2d151e54d/request/23935028-f9bcafb7-b36c-4f44-8ac2-4f5244a6bca4
-    // - [ ] 게임 정보 기록할 DB 테이블 구성
+    // - [x] 게임 정보 기록할 DB 테이블 구성
     // - [ ] 게임 방 정보 앱 서버로부터 가져오기
     // - [ ] 로딩 API에 추가한 값 앱 서버로부터 가져오기
     // - [ ] 에너지 및 아이템 차감 처리하기
+    // - [ ] 1분 간 게임 기록 API 호출이 없는 유저 이탈 처리하기
 
     [HttpPost]
     [Route("loading")]
@@ -392,9 +394,73 @@ public class ToriController : Controller
     [HttpPost]
     [Route("play-data")]
     [SwaggerOperation("게임 기록 (WIP)", "(WIP)")]
-    public async Task<IActionResult> PlayData([FromBody] PlayInfoBody req)
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
+    [SwaggerResponse(StatusCodes.Status200OK)]
+    public async Task<IActionResult> PlayData([FromBody] PlayDataBody req)
     {
-        return this.Ok();
+        var transaction = await this.dbContext.Database.BeginTransactionAsync();
+        try
+        {
+            var (resultCode, user) = await ValidateToken(req.Token);
+
+            switch (resultCode)
+            {
+                case ResultCode.Ok:
+                    break;
+
+                case ResultCode.InvalidParameter:
+                    await transaction.RollbackAsync();
+                    return this.Unauthorized();
+                case ResultCode.SessionNotFound:
+                case ResultCode.NotJoinedUser:
+                    await transaction.RollbackAsync();
+                    return this.Conflict();
+                case ResultCode.UnhandledError:
+                default:
+                    throw new InvalidOperationException(resultCode.ToString());
+            }
+
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
+
+            var gameUser = await this.dbContext.GameUsers.FirstOrDefaultAsync(u =>
+                u.RoomId == user.PlaySession.RoomId
+                && u.UserId == user.UserId);
+            
+            if (gameUser == null) throw new InvalidOperationException("Cannot found game user from DB");
+            if (gameUser.Status != PlayStatus.Playing)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
+
+            await this.dbContext.PlayData.AddAsync(new GamePlayData
+            {
+                RoomId = (int)user.PlaySession.RoomId,
+                UserId = user.UserId,
+                UseItems = JsonSerializer.Serialize(req.UsedItems),
+                TimeStamp = DateTime.UtcNow,
+                GameUser = gameUser,
+            });
+            
+            await transaction.CommitAsync();
+
+            return this.Ok();
+        }
+        catch (Exception e)
+        {
+            await transaction.RollbackAsync();
+            this.logger.LogCritical(e, "API HAS EXCEPTION - play-data [token : {token}]", req.Token);
+            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+        }
+        finally
+        {
+            await transaction.DisposeAsync();
+        }
     }
     
     [HttpPost]
