@@ -9,6 +9,7 @@ public class AppDbContext : DbContext
 {
     public DbSet<GameConstant> GameConstants { get; set; } = default!;
     public DbSet<GameStage> GameStages { get; set; } = default!;
+    public DbSet<GameUser> GameUsers { get; set; } = default!;
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
