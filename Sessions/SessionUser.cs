@@ -9,6 +9,7 @@ public class SessionUser
 
     public GameSession? PlaySession { get; private set; }
     public UserInfo UserInfo { get; set; } = default!;
+    public DateTime LastActiveAt { get; set; }
     public bool HasJoined { get; set; }
     public bool HasQuit { get; set; }
     public bool HasLeft { get; set; }
@@ -20,6 +21,7 @@ public class SessionUser
     {
         this.Identifier = identifier;
         this.JoinedAt = joinedAt;
+        this.LastActiveAt = joinedAt;
     }
 
     /// <summary>

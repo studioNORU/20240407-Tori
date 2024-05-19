@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using MySqlConnector;
 using Swashbuckle.AspNetCore.Annotations;
 using tori.AppApi;
 using tori.AppApi.Model;
@@ -33,7 +35,26 @@ public class ToriController : Controller
     // - [x] 게임 방 정보 앱 서버로부터 가져오기
     // - [x] 로딩 API에 추가한 값 앱 서버로부터 가져오기
     // - [ ] 에너지 및 아이템 차감 처리하기
-    // - [ ] 1분 간 게임 기록 API 호출이 없는 유저 이탈 처리하기
+    // - [x] 1분 간 게임 기록 API 호출이 없는 유저 이탈 처리하기
+
+    private async Task<IActionResult> HandleExceptionAsync(IDbContextTransaction? transaction, Exception e, string message,
+        params object[] args)
+    {
+        if (transaction != null) await transaction.RollbackAsync();
+        
+#pragma warning disable CA2254
+        this.logger.LogCritical(e, message, args);
+#pragma warning restore CA2254
+
+        var detail = e switch
+        {
+            MySqlException => "SQL Exception",
+            InvalidOperationException exception => exception.Message,
+            _ => null
+        };
+
+        return this.Problem(detail ?? "Failed to process operation", statusCode: StatusCodes.Status500InternalServerError);
+    }
 
     [HttpPost]
     [Route("loading")]
@@ -129,10 +150,9 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
-            await transaction.RollbackAsync();
-            this.logger.LogCritical(e, "API HAS EXCEPTION - loading [userId : {userId}, roomId : {roomId}]",
+            return await this.HandleExceptionAsync(transaction, e,
+                "API HAS EXCEPTION - loading [userId : {userId}, roomId : {roomId}]",
                 req.UserId, req.RoomId);
-            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
         }
         finally
         {
@@ -233,9 +253,8 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
-            await transaction.RollbackAsync();
-            this.logger.LogCritical(e, "API HAS EXCEPTION - gamestart [token : {token}]", req.Token);
-            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+            return await this.HandleExceptionAsync(transaction, e, "API HAS EXCEPTION - gamestart [token : {token}]",
+                req.Token);
         }
         finally
         {
@@ -332,11 +351,9 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
-            await transaction.RollbackAsync();
-            this.logger.LogCritical(e,
+            return await this.HandleExceptionAsync(transaction, e,
                 "API HAS EXCEPTION - gameend [token : {token}, hostTime : {hostTime}, itemCount : {itemCount}]",
                 req.Token, req.HostTime, req.ItemCount);
-            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
         }
         finally
         {
@@ -412,10 +429,8 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
-            await transaction.RollbackAsync();
-            this.logger.LogCritical(e,
+            return await this.HandleExceptionAsync(transaction, e,
                 "API HAS EXCEPTION - gamequit [token : {token}]", req.Token);
-            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
         }
         finally
         {
@@ -470,6 +485,8 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
+            user.LastActiveAt = DateTime.UtcNow;
+            
             await this.dbContext.PlayData.AddAsync(new GamePlayData
             {
                 RoomId = user.PlaySession.RoomId,
@@ -478,16 +495,15 @@ public class ToriController : Controller
                 TimeStamp = DateTime.UtcNow,
                 GameUser = gameUser,
             });
-            
+
             await transaction.CommitAsync();
 
             return this.Ok();
         }
         catch (Exception e)
         {
-            await transaction.RollbackAsync();
-            this.logger.LogCritical(e, "API HAS EXCEPTION - play-data [token : {token}]", req.Token);
-            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+            return await this.HandleExceptionAsync(transaction, e, "API HAS EXCEPTION - play-data [token : {token}]",
+                req.Token);
         }
         finally
         {
@@ -558,10 +574,9 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
-            this.logger.LogCritical(e,
+            return await this.HandleExceptionAsync(null, e,
                 "API HAS EXCEPTION - ranking [token : {token}, hostTime : {hostTime}, itemCount : {itemCount}]",
                 req.Token, req.HostTime, req.ItemCount);
-            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
         }
     }
     
@@ -627,8 +642,7 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
-            this.logger.LogCritical(e, "API HAS EXCEPTION - result [token : {token}", req.Token);
-            return this.Problem("Failed to process operation.", statusCode: StatusCodes.Status500InternalServerError);
+            return await this.HandleExceptionAsync(null, e, "API HAS EXCEPTION - result [token : {token}", req.Token);
         }
     }
 }

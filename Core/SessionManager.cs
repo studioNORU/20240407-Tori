@@ -16,7 +16,7 @@ public class SessionManager
     /// </summary>
     private readonly Dictionary<int, GameSession> sessions = new();
     
-    public static GameStage SelectStage(AppDbContext dbContext)
+    private static GameStage SelectStage(AppDbContext dbContext)
     {
         return dbContext.GameStages
             .ToList()
@@ -67,7 +67,7 @@ public class SessionManager
         {
             this.spinLock.Enter(ref lockTaken);
 
-            var gameUser = dbContext.GameUsers.FirstOrDefault(u =>
+            var gameUser = dbContext.GameUsers.LastOrDefault(u =>
                 u.UserId == identifier.UserId
                 && u.Status == PlayStatus.Playing);
 
@@ -180,5 +180,32 @@ public class SessionManager
         {
             if (lockTaken) this.spinLock.Exit();
         }
+    }
+
+    /// <summary>
+    /// 일정 시간 비활성화 상태인 (게임 기록 API가 호출되지 않은) 유저의 연결을 끊습니다.
+    /// </summary>
+    /// <param name="inactivityThreshold">연결을 끊을 비활성화 상태 지속 시간</param>
+    /// <returns>연결이 끊긴 비활성화 유저의 수</returns>
+    public int DisconnectInactiveUsers(TimeSpan inactivityThreshold)
+    {
+        var disconnected = 0;
+        var now = DateTime.UtcNow;
+        var lockTaken = false;
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+
+            foreach (var session in this.sessions.Values)
+            {
+                disconnected += session.DisconnectInactiveUsers(now, inactivityThreshold);
+            }
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
+
+        return disconnected;
     }
 }

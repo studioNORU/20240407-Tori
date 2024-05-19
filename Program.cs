@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddDbContext<AppDbContext>();
+builder.Services.AddHostedService<UserHealthCheckService>();
 builder.Services.AddControllers(config =>
 {
     foreach (var formatter in config.InputFormatters)

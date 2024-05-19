@@ -248,16 +248,21 @@ public class GameSession
             if (user.PlaySession != this) return ResultCode.NotJoinedUser;
             if (user.HasLeft) return ResultCode.NotJoinedUser;
 
-            if (isQuit) user.HasQuit = true;
-            user.HasLeft = true;
-            user.IsPlaying = false;
-            this.activeUsers.Remove(user);
+            this.InternalLeaveUser(user, isQuit);
             return ResultCode.Ok;
         }
         finally
         {
             if (lockTaken) this.spinLock.Exit();
         }
+    }
+
+    private void InternalLeaveUser(SessionUser user, bool isQuit = false)
+    {
+        if (isQuit) user.HasQuit = true;
+        user.HasLeft = true;
+        user.IsPlaying = false;
+        this.activeUsers.Remove(user);
     }
 
     /// <summary>
@@ -318,5 +323,39 @@ public class GameSession
         mine = found;
         first = this.ranking.GetFirst();
         return ResultCode.Ok;
+    }
+
+    /// <summary>
+    /// 일정 시간 비활성화 상태인 (게임 기록 API가 호출되지 않은) 유저의 연결을 끊습니다. (<see cref="SessionManager">SessionManager</see>를 통해 접근해야 합니다)
+    /// </summary>
+    /// <param name="now">현재 시간 (UTC)</param>
+    /// <param name="inactivityThreshold">연결을 끊을 비활성화 상태 지속 시간</param>
+    /// <returns>연결이 끊긴 비활성화 유저의 수</returns>
+    public int DisconnectInactiveUsers(DateTime now, TimeSpan inactivityThreshold)
+    {
+        var disconnected = 0;
+        var lockTaken = false;
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+
+            var inactiveUsers = this.activeUsers
+                .Where(u => inactivityThreshold <= now - u.LastActiveAt)
+                .ToArray();
+
+            foreach (var user in inactiveUsers)
+            {
+                if (user.PlaySession != this) continue;
+                if (user.HasLeft) continue;
+                
+                this.InternalLeaveUser(user, isQuit: true);
+                disconnected++;
+            }
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
+        return disconnected;
     }
 }
