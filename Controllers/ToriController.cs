@@ -35,8 +35,9 @@ public class ToriController : Controller
     // - [x] 게임 정보 기록할 DB 테이블 구성
     // - [x] 게임 방 정보 앱 서버로부터 가져오기
     // - [x] 로딩 API에 추가한 값 앱 서버로부터 가져오기
-    // - [ ] 에너지 및 아이템 차감 처리하기
+    // - [x] 에너지 및 아이템 차감 처리하기
     // - [x] 1분 간 게임 기록 API 호출이 없는 유저 이탈 처리하기
+    // - [ ] 게임 결과 앱 서버로 보내기
 
     private static async Task<(ResultCode, SessionUser?)> ValidateToken(string token)
     {

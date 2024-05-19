@@ -1,4 +1,8 @@
-﻿using tori.AppApi.Model;
+﻿using System.Text;
+using System.Text.Json;
+using tori.AppApi;
+using tori.AppApi.Model;
+using Tori.Controllers.Data;
 using tori.Core;
 using tori.Models;
 
@@ -347,10 +351,11 @@ public class GameSession
     /// <summary>
     /// 일정 시간 비활성화 상태인 (게임 기록 API가 호출되지 않은) 유저의 연결을 끊습니다. (<see cref="SessionManager">SessionManager</see>를 통해 접근해야 합니다)
     /// </summary>
+    /// <param name="apiClient">앱서버 API 클라이언트</param>
     /// <param name="now">현재 시간 (UTC)</param>
     /// <param name="inactivityThreshold">연결을 끊을 비활성화 상태 지속 시간</param>
     /// <returns>연결이 끊긴 비활성화 유저의 수</returns>
-    public int DisconnectInactiveUsers(DateTime now, TimeSpan inactivityThreshold)
+    public int DisconnectInactiveUsers(ApiClient apiClient, AppDbContext dbContext, DateTime now, TimeSpan inactivityThreshold)
     {
         var disconnected = 0;
         var lockTaken = false;
@@ -366,8 +371,17 @@ public class GameSession
             {
                 if (user.PlaySession != this) continue;
                 if (user.HasLeft) continue;
+
+                var gameUser = dbContext.GameUsers.LastOrDefault(u =>
+                    u.UserId == user.UserId
+                    && u.RoomId == this.RoomId
+                    && u.Status == PlayStatus.Playing);
+                
+                if (gameUser?.PlayData == null) continue;
                 
                 this.InternalLeaveUser(user, isQuit: true);
+                this.SendUserStatus(apiClient, user, gameUser.PlayData);
+                
                 disconnected++;
             }
         }
@@ -376,5 +390,29 @@ public class GameSession
             if (lockTaken) this.spinLock.Exit();
         }
         return disconnected;
+    }
+
+    private void SendUserStatus(ApiClient apiClient, SessionUser user, GamePlayData playData)
+    {
+        var playTime = playData.TimeStamp - this.GameStartAt;
+        var spentEnergy = (int)Math.Floor(playTime.TotalMinutes) * Constants.EnergyCostPerMinutes;
+        var curStatus = new UserStatus(
+            user.UserId,
+            playData.SpentItems,
+            spentEnergy,
+            playData.TimeStamp);
+        var delta = curStatus;
+
+        if (user.CachedStatus != null)
+        {
+            delta = user.CachedStatus.Delta(curStatus);
+        }
+
+        user.CachedStatus = delta;
+
+        _ = apiClient.PostAsync(API_URL.UserStatus, new StringContent(
+            JsonSerializer.Serialize(delta),
+            Encoding.UTF8,
+            "application/json"));
     }
 }

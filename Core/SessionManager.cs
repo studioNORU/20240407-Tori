@@ -1,4 +1,5 @@
-﻿using tori.AppApi.Model;
+﻿using tori.AppApi;
+using tori.AppApi.Model;
 using tori.Models;
 using tori.Sessions;
 
@@ -208,9 +209,11 @@ public class SessionManager
     /// <summary>
     /// 일정 시간 비활성화 상태인 (게임 기록 API가 호출되지 않은) 유저의 연결을 끊습니다.
     /// </summary>
+    /// <param name="apiClient">앱서버 API 클라이언트</param>
+    /// <param name="dbContext">DB 컨텍스트</param>
     /// <param name="inactivityThreshold">연결을 끊을 비활성화 상태 지속 시간</param>
     /// <returns>연결이 끊긴 비활성화 유저의 수</returns>
-    public int DisconnectInactiveUsers(TimeSpan inactivityThreshold)
+    public int DisconnectInactiveUsers(ApiClient apiClient, AppDbContext dbContext, TimeSpan inactivityThreshold)
     {
         var disconnected = 0;
         var now = DateTime.UtcNow;
@@ -221,7 +224,7 @@ public class SessionManager
 
             foreach (var session in this.sessions.Values)
             {
-                disconnected += session.DisconnectInactiveUsers(now, inactivityThreshold);
+                disconnected += session.DisconnectInactiveUsers(apiClient, dbContext, now, inactivityThreshold);
             }
         }
         finally
