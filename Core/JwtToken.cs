@@ -10,14 +10,14 @@ public static class JwtToken
 {
     private const string UserIdKey = "userId";
     private const string NicknameKey = "nickname";
-    private const string SessionIdKey = "sessionId";
+    private const string RoomIdKey = "roomId";
     private const string SecretKey = "TORIsecretSECURITYkey1234!@#$2345@#$%";
     
     private static readonly byte[] ByteSecretKey = Encoding.ASCII.GetBytes(SecretKey);
     private static readonly SymmetricSecurityKey SymmetricSecurityKey = new(ByteSecretKey);
     private static readonly SigningCredentials Credentials = new(SymmetricSecurityKey, SecurityAlgorithms.HmacSha256Signature);
     
-    public static string ToToken(string userId, string nickname, int sessionId)
+    public static string ToToken(string userId, string nickname, int roomId)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
         var tokenDescriptor = new SecurityTokenDescriptor
@@ -26,7 +26,7 @@ public static class JwtToken
             {
                 new Claim(UserIdKey, userId),
                 new Claim(NicknameKey, nickname),
-                new Claim(SessionIdKey, sessionId.ToString())
+                new Claim(RoomIdKey, roomId.ToString())
             }),
             Expires = DateTime.UtcNow.AddMinutes(Constants.JwtTokenDurationMinutes),
             SigningCredentials = Credentials,
@@ -62,14 +62,14 @@ public static class JwtToken
 
             var userId = jwtToken.Claims.First(x => x.Type == UserIdKey).Value;
             var nickname = jwtToken.Claims.First(x => x.Type == NicknameKey).Value;
-            var sessionIdStr = jwtToken.Claims.First(x => x.Type == SessionIdKey).Value;
+            var roomIdStr = jwtToken.Claims.First(x => x.Type == RoomIdKey).Value;
 
-            if (!int.TryParse(sessionIdStr, out var sessionId))
+            if (!int.TryParse(roomIdStr, out var roomId))
             {
                 throw new SecurityTokenException("InvalidToken");
             }
 
-            return (true, new(new UserIdentifier(userId, nickname), sessionId));
+            return (true, new(new UserIdentifier(userId, nickname), roomId));
         }
         catch
         {
@@ -78,4 +78,4 @@ public static class JwtToken
     }
 }
 
-public record TokenData(UserIdentifier User, int SessionId);
+public record TokenData(UserIdentifier User, int RoomId);

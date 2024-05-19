@@ -171,10 +171,33 @@ public class SessionManager
         {
             this.spinLock.Enter(ref lockTaken);
             
-            if (this.sessions.TryGetValue(tokenData.SessionId, out var session))
+            if (this.sessions.TryGetValue(tokenData.RoomId, out var session))
                 return session.TryGetUser(tokenData.User, out user);
             
             return ResultCode.SessionNotFound;
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
+    }
+
+    /// <summary>
+    /// 유저 ID와 게임 방 ID로 유저를 찾습니다
+    /// </summary>
+    /// <param name="userId">유저 ID</param>
+    /// <param name="roomId">게임 방 ID</param>
+    public SessionUser? TryGetUser(int userId, int roomId)
+    {
+        var lockTaken = false;
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+
+            if (this.sessions.TryGetValue(roomId, out var session))
+                return session.TryGetUser(userId);
+
+            return null;
         }
         finally
         {

@@ -2,6 +2,7 @@ using DotNetEnv;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi.Models;
+using tori.AppApi;
 using tori.Core;
 
 Env.Load();
@@ -9,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddDbContext<AppDbContext>();
+builder.Services.AddSingleton<ApiClient>();
 builder.Services.AddHostedService<UserHealthCheckService>();
 builder.Services.AddControllers(config =>
 {

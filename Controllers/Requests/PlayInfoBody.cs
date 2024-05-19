@@ -17,4 +17,9 @@ public record struct PlayInfoBody : IAuthBody
 
     [JsonIgnore]
     public int ItemCount => this.UsedItems.Values.Sum();
+
+    [JsonIgnore]
+    public Dictionary<int, int> SpentItems => this.UsedItems.ToDictionary(
+        it => int.Parse(it.Key),
+        it => it.Value);
 }

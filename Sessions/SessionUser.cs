@@ -1,4 +1,5 @@
 ﻿using tori.AppApi.Model;
+using Tori.Controllers.Data;
 
 namespace tori.Sessions;
 
@@ -9,6 +10,7 @@ public class SessionUser
 
     public GameSession? PlaySession { get; private set; }
     public UserInfo UserInfo { get; set; } = default!;
+    public UserStatus? CachedStatus { get; set; }
     public DateTime LastActiveAt { get; set; }
     public bool HasJoined { get; set; }
     public bool HasQuit { get; set; }

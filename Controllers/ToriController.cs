@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -23,11 +24,11 @@ public class ToriController : Controller
     private readonly AppDbContext dbContext;
     private readonly ApiClient apiClient;
 
-    public ToriController(ILogger<ToriController> logger, AppDbContext dbContext)
+    public ToriController(ILogger<ToriController> logger, AppDbContext dbContext, ApiClient apiClient)
     {
         this.logger = logger;
         this.dbContext = dbContext;
-        this.apiClient = new ApiClient();
+        this.apiClient = apiClient;
     }
     
     // https://bold-meadow-582767.postman.co/workspace/meow~e50fbf18-f4b7-4c0d-a1b2-e0e2d151e54d/request/23935028-f9bcafb7-b36c-4f44-8ac2-4f5244a6bca4
@@ -37,6 +38,19 @@ public class ToriController : Controller
     // - [ ] 에너지 및 아이템 차감 처리하기
     // - [x] 1분 간 게임 기록 API 호출이 없는 유저 이탈 처리하기
 
+    private static async Task<(ResultCode, SessionUser?)> ValidateToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return (ResultCode.InvalidParameter, null);
+        
+        var (isValid, data) = await JwtToken.Parse(token);
+        if (!isValid || string.IsNullOrWhiteSpace(data.User.Id)) return (ResultCode.InvalidParameter, null);
+
+        var result = SessionManager.I.TryGetUser(data, out var user);
+        if (user.HasQuit) return (ResultCode.NotJoinedUser, user);
+        
+        return (result, user);
+    }
+    
     private async Task<IActionResult> HandleExceptionAsync(IDbContextTransaction? transaction, Exception e, string message,
         params object[] args)
     {
@@ -54,6 +68,31 @@ public class ToriController : Controller
         };
 
         return this.Problem(detail ?? "Failed to process operation", statusCode: StatusCodes.Status500InternalServerError);
+    }
+
+    private async Task SendUserStatusAsync(SessionUser sessionUser, Dictionary<int, int> spentItems, DateTime timestamp)
+    {
+        var playTime = timestamp - sessionUser.PlaySession!.GameStartAt;
+        var spentEnergy = (int)Math.Floor(playTime.TotalMinutes) * Constants.EnergyCostPerMinutes;
+        var curStatus = new UserStatus(
+            sessionUser.UserId,
+            spentItems,
+            spentEnergy,
+            timestamp);
+        var delta = curStatus;
+
+        if (sessionUser.CachedStatus != null)
+        {
+            delta = sessionUser.CachedStatus.Delta(curStatus);
+        }
+
+        sessionUser.CachedStatus = curStatus;
+
+        var json = JsonSerializer.Serialize(delta);
+        await this.apiClient.PostAsync(API_URL.UserStatus, new StringContent(
+            json,
+            Encoding.UTF8,
+            "application/json"));
     }
 
     [HttpPost]
@@ -158,19 +197,6 @@ public class ToriController : Controller
         {
             await transaction.DisposeAsync();
         }
-    }
-
-    private static async Task<(ResultCode, SessionUser?)> ValidateToken(string token)
-    {
-        if (string.IsNullOrWhiteSpace(token)) return (ResultCode.InvalidParameter, null);
-        
-        var (isValid, data) = await JwtToken.Parse(token);
-        if (!isValid || string.IsNullOrWhiteSpace(data.User.Id)) return (ResultCode.InvalidParameter, null);
-
-        var result = SessionManager.I.TryGetUser(data, out var user);
-        if (user.HasQuit) return (ResultCode.NotJoinedUser, user);
-        
-        return (result, user);
     }
 
     [HttpPost]
@@ -342,6 +368,8 @@ public class ToriController : Controller
             gameUser.Status = PlayStatus.Done;
             gameUser.LeavedAt = DateTime.UtcNow;
             this.dbContext.GameUsers.Update(gameUser);
+
+            await this.SendUserStatusAsync(user, req.SpentItems, now);
             await transaction.CommitAsync();
             
             return this.Json(new GameEndResponse
@@ -420,9 +448,12 @@ public class ToriController : Controller
                 throw new InvalidOperationException(resultCode.ToString());
             }
 
+            var now = DateTime.UtcNow;
             gameUser.Status = PlayStatus.Quit;
-            gameUser.LeavedAt = DateTime.UtcNow;
+            gameUser.LeavedAt = now;
             this.dbContext.GameUsers.Update(gameUser);
+
+            await this.SendUserStatusAsync(user, gameUser.PlayData!.SpentItems, now);
             await transaction.CommitAsync();
 
             return this.Ok();
@@ -491,7 +522,8 @@ public class ToriController : Controller
             {
                 RoomId = user.PlaySession.RoomId,
                 UserId = user.UserId,
-                UseItems = JsonSerializer.Serialize(req.UsedItems),
+                UseItems = JsonSerializer.Serialize(req.UsedItems
+                    .ToDictionary(it => int.Parse(it.Key), it => it.Value)),
                 TimeStamp = DateTime.UtcNow,
                 GameUser = gameUser,
             });
@@ -504,6 +536,56 @@ public class ToriController : Controller
         {
             return await this.HandleExceptionAsync(transaction, e, "API HAS EXCEPTION - play-data [token : {token}]",
                 req.Token);
+        }
+        finally
+        {
+            await transaction.DisposeAsync();
+        }
+    }
+
+    [HttpPost]
+    [Route("status")]
+    [SwaggerOperation("유저 정보 갱신", "play-data API를 통해 기록된 시간 정보와 아이템 사용 정보를 바탕으로 앱 서버에 에너지 및 아이템 차감을 요청합니다.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
+    [SwaggerResponse(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Status([FromBody] StatusBody req)
+    {
+        var transaction = await this.dbContext.Database.BeginTransactionAsync();
+        try
+        {
+            if (!int.TryParse(req.UserId, out var userId))
+            {
+                await transaction.RollbackAsync();
+                return this.BadRequest();
+            }
+
+            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
+                u.UserId == userId
+                && u.Status == PlayStatus.Playing);
+
+            if (gameUser == null)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
+
+            var user = SessionManager.I.TryGetUser(gameUser.UserId, gameUser.RoomId);
+            if (user == null)
+            {
+                await transaction.RollbackAsync();
+                return this.Conflict();
+            }
+
+            await this.SendUserStatusAsync(user, gameUser.PlayData!.SpentItems, gameUser.PlayData!.TimeStamp);
+            await transaction.CommitAsync();
+            
+            return this.Ok();
+        }
+        catch (Exception e)
+        {
+            return await this.HandleExceptionAsync(transaction, e, "API HAS EXCEPTION - status [userId : {userId}]",
+                req.UserId);
         }
         finally
         {

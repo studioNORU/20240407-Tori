@@ -16,6 +16,11 @@ public static class Constants
     /// 게임 기록 API 호출이 없는 유저를 게임에 유지시킬 시간입니다. (초 단위)
     /// </summary>
     public const int UserHealthCheckThresholdSeconds = 60;
+
+    /// <summary>
+    /// 게임 플레이 1분 당 소모되는 에너지의 양입니다.
+    /// </summary>
+    public const int EnergyCostPerMinutes = 10;
     
     /// <summary>
     /// 첫 gameend 요청 이후 랭킹 집계 강제 마감까지 대기할 시간입니다. (초 단위)

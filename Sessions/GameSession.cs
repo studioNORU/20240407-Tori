@@ -290,6 +290,25 @@ public class GameSession
             if (lockTaken) this.spinLock.Exit();
         }
     }
+    
+    /// <summary>
+    /// 세션에 참여 중인 특정 유저를 찾습니다 (<see cref="SessionManager">SessionManager</see>를 통해 접근해야 합니다)
+    /// </summary>
+    /// <param name="userId">찾고 있는 유저의 ID</param>
+    public SessionUser? TryGetUser(int userId)
+    {
+        var lockTaken = false;
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+
+            return this.users.FirstOrDefault(u => u.UserId == userId);
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
+    }
 
     /// <summary>
     /// 유저의 랭킹 정보를 갱신합니다

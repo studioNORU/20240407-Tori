@@ -1,4 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 
 namespace tori.Models;
@@ -18,4 +20,7 @@ public class GamePlayData
     public DateTime TimeStamp { get; set; }
     
     public GameUser GameUser { get; set; } = default!;
+
+    [JsonIgnore]
+    public Dictionary<int, int> SpentItems => JsonSerializer.Deserialize<Dictionary<int, int>>(this.UseItems)!;
 }
