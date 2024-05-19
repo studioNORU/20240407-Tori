@@ -6,24 +6,25 @@ public class PostGameResultService : BackgroundService
 {
     private readonly TimeSpan interval = TimeSpan.FromSeconds(Constants.PostGameResultIntervalSeconds);
     private readonly ILogger<PostGameResultService> logger;
-    private readonly ApiClient apiClient;
-    private readonly AppDbContext dbContext;
+    private readonly IServiceScopeFactory serviceScopeFactory;
 
-    public PostGameResultService(ILogger<PostGameResultService> logger, ApiClient apiClient, AppDbContext dbContext)
+    public PostGameResultService(ILogger<PostGameResultService> logger, IServiceScopeFactory serviceScopeFactory)
     {
         this.logger = logger;
-        this.apiClient = apiClient;
-        this.dbContext = dbContext;
+        this.serviceScopeFactory = serviceScopeFactory;
     }
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var transaction = await this.dbContext.Database.BeginTransactionAsync(stoppingToken);
+            using var scope = this.serviceScopeFactory.CreateScope();
+            var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var transaction = await dbContext.Database.BeginTransactionAsync(stoppingToken);
             try
             {
-                await SessionManager.I.PostGameResult(this.apiClient, this.dbContext);
+                await SessionManager.I.PostGameResult(apiClient, dbContext);
                 await transaction.CommitAsync(stoppingToken);
                 await Task.Delay(this.interval, stoppingToken);
             }

@@ -6,8 +6,8 @@ namespace Tori.Controllers.Requests;
 public class PlayDataBody : IAuthBody
 {
     [SwaggerSchema("게임 토큰", Nullable = false)]
-    public string Token { get; init; }
-    
+    public string Token { get; init; } = default!;
+
     [SwaggerSchema("아이템별 사용 횟수", Nullable = false)]
-    public Dictionary<string, int> UsedItems { get; init; }
+    public Dictionary<string, int> UsedItems { get; init; } = default!;
 }

@@ -7,26 +7,27 @@ public class UserHealthCheckService : BackgroundService
     private readonly TimeSpan interval = TimeSpan.FromSeconds(Constants.UserHealthCheckIntervalSeconds);
     private readonly TimeSpan threshold = TimeSpan.FromSeconds(Constants.UserHealthCheckThresholdSeconds);
     private readonly ILogger<UserHealthCheckService> logger;
-    private readonly AppDbContext dbContext;
-    private readonly ApiClient apiClient;
+    private readonly IServiceScopeFactory serviceScopeFactory;
 
-    public UserHealthCheckService(ILogger<UserHealthCheckService> logger, AppDbContext dbContext, ApiClient apiClient)
+    public UserHealthCheckService(ILogger<UserHealthCheckService> logger, IServiceScopeFactory serviceScopeFactory)
     {
         this.logger = logger;
-        this.dbContext = dbContext;
-        this.apiClient = apiClient;
+        this.serviceScopeFactory = serviceScopeFactory;
     }
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var transaction = await this.dbContext.Database.BeginTransactionAsync(stoppingToken);
+            using var scope = this.serviceScopeFactory.CreateScope();
+            var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var transaction = await dbContext.Database.BeginTransactionAsync(stoppingToken);
             try
             {
                 var disconnected =
-                    SessionManager.I.DisconnectInactiveUsers(this.apiClient, this.dbContext, this.threshold);
-                this.logger.LogInformation("Disconnected {count} inactive users", disconnected);
+                    SessionManager.I.DisconnectInactiveUsers(apiClient, dbContext, this.threshold);
+                if (0 < disconnected) this.logger.LogInformation("Disconnected {count} inactive users", disconnected);
                 await transaction.CommitAsync(stoppingToken);
                 await Task.Delay(this.interval, stoppingToken);
             }

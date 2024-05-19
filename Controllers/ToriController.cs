@@ -89,16 +89,15 @@ public class ToriController : Controller
 
         sessionUser.CachedStatus = curStatus;
 
-        var json = JsonSerializer.Serialize(delta);
         await this.apiClient.PostAsync(API_URL.UserStatus, new StringContent(
-            json,
+            JsonSerializer.Serialize(delta),
             Encoding.UTF8,
             "application/json"));
     }
 
     [HttpPost]
     [Route("loading")]
-    [SwaggerOperation("로딩 (WIP)", "게임 진입에 앞서 필요한 정보를 로딩합니다. (WIP)")]
+    [SwaggerOperation("로딩", "게임 진입에 앞서 필요한 정보를 로딩합니다.")]
     [SwaggerResponse(StatusCodes.Status400BadRequest, "정상적이지 않은 값으로 API를 호출하여 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "이미 해당 유저가 게임에 참여 중이기 때문에 처리에 실패했습니다.")]
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(LoadingResponse))]
@@ -145,33 +144,56 @@ public class ToriController : Controller
             if (user == null) throw new InvalidOperationException("User is null");
             user.UserInfo = userInfo;
 
-            var duplicates = await this.dbContext.GameUsers.CountAsync(u =>
+            var now = DateTime.UtcNow;
+            var duplicate = await this.dbContext.GameUsers
+                .Include(u => u.PlayData)
+                .SingleOrDefaultAsync(u =>
                 u.RoomId == session.RoomId
-                && u.UserId == user.UserId
-                && u.Status != PlayStatus.Disconnected
-                && u.Status != PlayStatus.Quit);
+                && u.UserId == user.UserId);
 
-            if (0 < duplicates)
+            if (duplicate == null)
+            {
+                await this.dbContext.GameUsers.AddAsync(new GameUser
+                {
+                    RoomId = session.RoomId,
+                    UserId = user.UserId,
+                    Status = PlayStatus.Ready,
+                    JoinedAt = user.JoinedAt,
+                    LeavedAt = null,
+                    PlayData = null,
+                });
+            }
+            else if (duplicate.Status is PlayStatus.Disconnected or PlayStatus.Quit or PlayStatus.Done)
             {
                 await transaction.RollbackAsync();
                 return this.Conflict();
             }
-            
-            await this.dbContext.GameUsers.AddAsync(new GameUser
+            else
             {
-                RoomId = session.RoomId,
-                UserId = user.UserId,
-                Status = PlayStatus.Ready,
-                JoinedAt = user.JoinedAt,
-                LeavedAt = null,
-                PlayData = null,
-            });
+                if (duplicate.PlayData != null)
+                {
+                    this.dbContext.PlayData.Remove(duplicate.PlayData);
+                }
+
+                if (session.GameStartAt <= now)
+                {
+                    duplicate.Status = PlayStatus.Playing;
+                }
+                duplicate.JoinedAt = user.JoinedAt;
+                duplicate.LeavedAt = null;
+                duplicate.PlayData = null;
+                this.dbContext.GameUsers.Update(duplicate);
+            }
+            await this.dbContext.SaveChangesAsync();
 
             var constants = await this.dbContext.GameConstants
                 .ToDictionaryAsync(x => x.Key, x => x.Value);
 
             await transaction.CommitAsync();
 
+            this.logger.LogDebug("loading [userId : {userId}, roomId : {roomId}, startAt : {startAt}, endAt : {endAt}]",
+                user.UserId, session.RoomId, session.GameStartAt.ToLocalTime(), session.GameEndAt.ToLocalTime());
+            
             return this.Json(new LoadingResponse
             {
                 Token = JwtToken.ToToken(req.UserId, userInfo.Nickname, session.RoomId),
@@ -185,7 +207,7 @@ public class ToriController : Controller
                 GameReward = roomInfo.GoodsInfo.ToReward(),
                 GameStartUtc = session.GameStartAt.Ticks,
                 GameEndUtc = session.GameEndAt.Ticks,
-                CurrentTick = DateTime.UtcNow.Ticks,
+                CurrentTick = now.Ticks,
             });
         }
         catch (Exception e)
@@ -244,7 +266,7 @@ public class ToriController : Controller
                 return this.StatusCode(StatusCodes.Status408RequestTimeout);
             }
 
-            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
+            var gameUser = await this.dbContext.GameUsers.SingleOrDefaultAsync(u =>
                 u.RoomId == user.PlaySession.RoomId
                 && u.UserId == user.UserId);
             
@@ -268,8 +290,10 @@ public class ToriController : Controller
                 throw new InvalidOperationException(resultCode.ToString());
             }
 
+            user.LastActiveAt = now;
             gameUser.Status = PlayStatus.Playing;
             this.dbContext.GameUsers.Update(gameUser);
+            await this.dbContext.SaveChangesAsync();
 
             await transaction.CommitAsync();
             return this.Json(new GameStartResponse
@@ -329,7 +353,7 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
-            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
+            var gameUser = await this.dbContext.GameUsers.SingleOrDefaultAsync(u =>
                 u.RoomId == user.PlaySession.RoomId
                 && u.UserId == user.UserId);
             
@@ -367,8 +391,9 @@ public class ToriController : Controller
                 user.PlaySession.ReserveClose();
 
             gameUser.Status = PlayStatus.Done;
-            gameUser.LeavedAt = DateTime.UtcNow;
+            gameUser.LeavedAt = now;
             this.dbContext.GameUsers.Update(gameUser);
+            await this.dbContext.SaveChangesAsync();
 
             await this.SendUserStatusAsync(user, req.SpentItems, now);
             await transaction.CommitAsync();
@@ -426,9 +451,12 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
-            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
-                u.RoomId == user.PlaySession.RoomId
-                && u.UserId == user.UserId);
+            var gameUser = await this.dbContext.GameUsers
+                .Include(u => u.PlayData)
+                .OrderBy(u => u.Id)
+                .SingleOrDefaultAsync(u =>
+                    u.RoomId == user.PlaySession.RoomId
+                    && u.UserId == user.UserId);
             
             if (gameUser == null) throw new InvalidOperationException("Cannot found game user from DB");
             if (gameUser.Status != PlayStatus.Playing)
@@ -453,6 +481,7 @@ public class ToriController : Controller
             gameUser.Status = PlayStatus.Quit;
             gameUser.LeavedAt = now;
             this.dbContext.GameUsers.Update(gameUser);
+            await this.dbContext.SaveChangesAsync();
 
             await this.SendUserStatusAsync(user, gameUser.PlayData!.SpentItems, now);
             await transaction.CommitAsync();
@@ -506,9 +535,11 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
-            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
-                u.RoomId == user.PlaySession.RoomId
-                && u.UserId == user.UserId);
+            var gameUser = await this.dbContext.GameUsers
+                .Include(u => u.PlayData)
+                .SingleOrDefaultAsync(u =>
+                    u.RoomId == user.PlaySession.RoomId
+                    && u.UserId == user.UserId);
             
             if (gameUser == null) throw new InvalidOperationException("Cannot found game user from DB");
             if (gameUser.Status != PlayStatus.Playing)
@@ -517,17 +548,32 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
-            user.LastActiveAt = DateTime.UtcNow;
-            
-            await this.dbContext.PlayData.AddAsync(new GamePlayData
+            var now = DateTime.UtcNow;
+            user.LastActiveAt = now;
+
+            var useItemsJson = JsonSerializer.Serialize(req.UsedItems
+                .ToDictionary(it => int.Parse(it.Key), it => it.Value));
+            if (gameUser.PlayData == null)
             {
-                RoomId = user.PlaySession.RoomId,
-                UserId = user.UserId,
-                UseItems = JsonSerializer.Serialize(req.UsedItems
-                    .ToDictionary(it => int.Parse(it.Key), it => it.Value)),
-                TimeStamp = DateTime.UtcNow,
-                GameUser = gameUser,
-            });
+                await this.dbContext.PlayData.AddAsync(new GamePlayData
+                {
+                    RoomId = user.PlaySession.RoomId,
+                    UserId = user.UserId,
+                    UseItems = useItemsJson,
+                    TimeStamp = now,
+                    GameUser = gameUser,
+                });
+            }
+            else
+            {
+                var playData = gameUser.PlayData;
+                playData.UseItems = useItemsJson;
+                playData.TimeStamp = now;
+                playData.GameUser = gameUser;
+                this.dbContext.PlayData.Update(playData);
+            }
+            
+            await this.dbContext.SaveChangesAsync();
 
             await transaction.CommitAsync();
 
@@ -561,9 +607,11 @@ public class ToriController : Controller
                 return this.BadRequest();
             }
 
-            var gameUser = await this.dbContext.GameUsers.LastOrDefaultAsync(u =>
-                u.UserId == userId
-                && u.Status == PlayStatus.Playing);
+            var gameUser = await this.dbContext.GameUsers
+                .Include(u => u.PlayData)
+                .SingleOrDefaultAsync(u =>
+                    u.UserId == userId
+                    && u.Status == PlayStatus.Playing);
 
             if (gameUser == null)
             {
@@ -652,7 +700,7 @@ public class ToriController : Controller
                     Ranking = first.Ranking,
                     HostTime = first.HostTime
                 },
-                CurrentTick = DateTime.UtcNow.Ticks,
+                CurrentTick = now.Ticks,
             });
         }
         catch (Exception e)
@@ -720,7 +768,7 @@ public class ToriController : Controller
                     Ranking = first.Ranking,
                     HostTime = first.HostTime
                 },
-                CurrentTick = DateTime.UtcNow.Ticks,
+                CurrentTick = now.Ticks,
             });
         }
         catch (Exception e)

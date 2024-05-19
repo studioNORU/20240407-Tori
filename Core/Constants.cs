@@ -10,7 +10,7 @@ public static class Constants
     /// <summary>
     /// 일정 시간 게임 기록 API의 호출이 없는 유저를 탐지할 시간 간격입니다. (초 단위)
     /// </summary>
-    public const int UserHealthCheckIntervalSeconds = 30;
+    public const int UserHealthCheckIntervalSeconds = 10;
 
     /// <summary>
     /// 게임 기록 API 호출이 없는 유저를 게임에 유지시킬 시간입니다. (초 단위)
@@ -35,5 +35,5 @@ public static class Constants
     /// <summary>
     /// 랭킹 집계 마감이 완료된 세션의 초기화 후 재활용까지 보류할 시간입니다. (초 단위)
     /// </summary>
-    public const int SessionDeferRecycleSeconds = 30;
+    public const int SessionDeferRecycleSeconds = 60;
 }

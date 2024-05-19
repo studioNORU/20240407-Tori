@@ -175,8 +175,6 @@ public class GameSession
             // gameend 이후 다시 재개하는 유저
             else if (user != null)
             {
-                if (user.HasJoined && !user.HasLeft) return ResultCode.AlreadyJoined;
-                
                 // gamestart 호출 가능한 시점 이후라면 관련 처리 진행
                 if (this.GameStartAt <= DateTime.UtcNow)
                 {
@@ -376,14 +374,22 @@ public class GameSession
                 if (user.PlaySession != this) continue;
                 if (user.HasLeft) continue;
 
-                var gameUser = dbContext.GameUsers.LastOrDefault(u =>
-                    u.UserId == user.UserId
-                    && u.RoomId == this.RoomId
-                    && u.Status == PlayStatus.Playing);
+                var gameUser = dbContext.GameUsers
+                    .Include(u => u.PlayData)
+                    .SingleOrDefault(u =>
+                        u.UserId == user.UserId
+                        && u.RoomId == this.RoomId);
                 
-                if (gameUser?.PlayData == null) continue;
+                if (gameUser == null) continue;
+                if (gameUser.Status != PlayStatus.Playing) continue;
                 
                 this.InternalLeaveUser(user, isQuit: true);
+                
+                gameUser.Status = PlayStatus.Disconnected;
+                gameUser.LeavedAt = now;
+                dbContext.GameUsers.Update(gameUser);
+                dbContext.SaveChanges();
+                
                 this.SendUserStatus(apiClient, user, gameUser.PlayData);
                 
                 disconnected++;
@@ -396,15 +402,16 @@ public class GameSession
         return disconnected;
     }
 
-    private void SendUserStatus(ApiClient apiClient, SessionUser user, GamePlayData playData)
+    private void SendUserStatus(ApiClient apiClient, SessionUser user, GamePlayData? playData)
     {
-        var playTime = playData.TimeStamp - this.GameStartAt;
+        var timestamp = playData?.TimeStamp ?? DateTime.UtcNow;
+        var playTime = timestamp - this.GameStartAt;
         var spentEnergy = (int)Math.Floor(playTime.TotalMinutes) * Constants.EnergyCostPerMinutes;
         var curStatus = new UserStatus(
             user.UserId,
-            playData.SpentItems,
+            playData?.SpentItems ?? new Dictionary<int, int>(),
             spentEnergy,
-            playData.TimeStamp);
+            timestamp);
         var delta = curStatus;
 
         if (user.CachedStatus != null)
@@ -435,7 +442,7 @@ public class GameSession
 
             var userIds = this.users.Select(u => u.UserId).ToList();
             var first = this.ranking.GetFirst();
-            var firstPlayData = await dbContext.PlayData.LastOrDefaultAsync(p =>
+            var firstPlayData = await dbContext.PlayData.SingleOrDefaultAsync(p =>
                 p.UserId == first.Identifier.UserId
                 && p.RoomId == this.RoomId);
             var spentItems = firstPlayData?.SpentItems ?? new Dictionary<int, int>();
