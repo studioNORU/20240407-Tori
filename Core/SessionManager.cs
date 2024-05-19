@@ -234,4 +234,26 @@ public class SessionManager
 
         return disconnected;
     }
+
+    public async Task PostGameResult(ApiClient apiClient, AppDbContext dbContext)
+    {
+        var now = DateTime.UtcNow;
+        var lockTaken = false;
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+
+            foreach (var session in this.sessions.Values)
+            {
+                if (session.SentResult) continue;
+                if (session.CloseAt == null || now < session.CloseAt) continue;
+
+                await session.SendResult(apiClient, dbContext);
+            }
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
+    }
 }

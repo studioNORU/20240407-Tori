@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using tori.AppApi;
 using tori.AppApi.Model;
 using Tori.Controllers.Data;
@@ -33,6 +34,7 @@ public class GameSession
     public DateTime GameStartAt { get; private set; } = DateTime.MaxValue;
     public DateTime GameEndAt { get; private set; } = DateTime.MaxValue;
     public DateTime? CloseAt { get; private set; }
+    public bool SentResult { get; private set; }
     
     public IEnumerable<string> GetNicknames()
     {
@@ -68,6 +70,7 @@ public class GameSession
             this.GameStartAt = roomInfo.BeginRunningTime;
             this.GameEndAt = this.roomInfo.EndRunningTime;
             this.CloseAt = null;
+            this.SentResult = false;
         }
         finally
         {
@@ -352,6 +355,7 @@ public class GameSession
     /// 일정 시간 비활성화 상태인 (게임 기록 API가 호출되지 않은) 유저의 연결을 끊습니다. (<see cref="SessionManager">SessionManager</see>를 통해 접근해야 합니다)
     /// </summary>
     /// <param name="apiClient">앱서버 API 클라이언트</param>
+    /// <param name="dbContext">DB 컨텍스트</param>
     /// <param name="now">현재 시간 (UTC)</param>
     /// <param name="inactivityThreshold">연결을 끊을 비활성화 상태 지속 시간</param>
     /// <returns>연결이 끊긴 비활성화 유저의 수</returns>
@@ -414,5 +418,47 @@ public class GameSession
             JsonSerializer.Serialize(delta),
             Encoding.UTF8,
             "application/json"));
+    }
+
+    /// <summary>
+    /// 게임 결과를 앱 서버로 전송합니다. (<see cref="SessionManager">SessionManager</see>를 통해 접근해야 합니다)
+    /// </summary>
+    /// <param name="apiClient">앱서버 API 클라이언트</param>
+    /// <param name="dbContext">DB 컨텍스트</param>
+    public async Task SendResult(ApiClient apiClient, AppDbContext dbContext)
+    {
+        var lockTaken = false;
+
+        try
+        {
+            this.spinLock.Enter(ref lockTaken);
+
+            var userIds = this.users.Select(u => u.UserId).ToList();
+            var first = this.ranking.GetFirst();
+            var firstPlayData = await dbContext.PlayData.LastOrDefaultAsync(p =>
+                p.UserId == first.Identifier.UserId
+                && p.RoomId == this.RoomId);
+            var spentItems = firstPlayData?.SpentItems ?? new Dictionary<int, int>();
+
+            await apiClient.PostAsync(API_URL.Result, new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    RoomId = this.RoomId,
+                    UserIds = userIds,
+                    First = new
+                    {
+                        UserId = first.Identifier.UserId,
+                        SpentItems = spentItems,
+                        HostTime = first.HostTime
+                    }
+                }),
+                Encoding.UTF8,
+                "application/json"));
+            this.SentResult = true;
+        }
+        finally
+        {
+            if (lockTaken) this.spinLock.Exit();
+        }
     }
 }

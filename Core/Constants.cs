@@ -18,6 +18,11 @@ public static class Constants
     public const int UserHealthCheckThresholdSeconds = 60;
 
     /// <summary>
+    /// 집계가 종료된 게임의 결과를 보내는 주기입니다. (초 단위)
+    /// </summary>
+    public const int PostGameResultIntervalSeconds = 30;
+
+    /// <summary>
     /// 게임 플레이 1분 당 소모되는 에너지의 양입니다.
     /// </summary>
     public const int EnergyCostPerMinutes = 10;

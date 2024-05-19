@@ -12,6 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>();
 builder.Services.AddSingleton<ApiClient>();
 builder.Services.AddHostedService<UserHealthCheckService>();
+builder.Services.AddHostedService<PostGameResultService>();
 builder.Services.AddControllers(config =>
 {
     foreach (var formatter in config.InputFormatters)
