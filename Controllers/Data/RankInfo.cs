@@ -11,9 +11,6 @@ public record RankInfo
     [SwaggerSchema("플레이어 닉네임", Nullable = false)]
     public string UserNickname { get; init; } = default!;
     
-    [SwaggerSchema("방 번호", Nullable = false)]
-    public int RoomId { get; init; }
-    
     [SwaggerSchema("랭킹 등수", Nullable = false)]
     public int Ranking { get; init; }
     

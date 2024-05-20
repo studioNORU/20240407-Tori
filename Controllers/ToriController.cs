@@ -198,7 +198,6 @@ public class ToriController : Controller
             {
                 Token = JwtToken.ToToken(req.UserId, userInfo.Nickname, session.RoomId),
                 Constants = constants,
-                RoomId = session.RoomId,
                 StageId = session.StageId,
                 UserNickname = userInfo.Nickname,
                 Energy = userInfo.Energy,
@@ -421,7 +420,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GameQuit([FromBody] PlayInfoBody req)
+    public async Task<IActionResult> GameQuit([FromBody] AuthBody req)
     {
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
@@ -688,7 +687,6 @@ public class ToriController : Controller
                 {
                     UserId = mine.Identifier.Id,
                     UserNickname = mine.Identifier.Nickname,
-                    RoomId = user.PlaySession.RoomId,
                     Ranking = mine.Ranking,
                     HostTime = mine.HostTime,
                 },
@@ -696,7 +694,6 @@ public class ToriController : Controller
                 {
                     UserId = first.Identifier.Id,
                     UserNickname = first.Identifier.Nickname,
-                    RoomId = user.PlaySession.RoomId,
                     Ranking = first.Ranking,
                     HostTime = first.HostTime
                 },
@@ -756,7 +753,6 @@ public class ToriController : Controller
                 {
                     UserId = mine.Identifier.Id,
                     UserNickname = mine.Identifier.Nickname,
-                    RoomId = user.PlaySession.RoomId,
                     Ranking = mine.Ranking,
                     HostTime = mine.HostTime,
                 },
@@ -764,7 +760,6 @@ public class ToriController : Controller
                 {
                     UserId = first.Identifier.Id,
                     UserNickname = first.Identifier.Nickname,
-                    RoomId = user.PlaySession.RoomId,
                     Ranking = first.Ranking,
                     HostTime = first.HostTime
                 },
