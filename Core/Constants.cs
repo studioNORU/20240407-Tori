@@ -35,5 +35,5 @@ public static class Constants
     /// <summary>
     /// 랭킹 집계 마감이 완료된 세션의 초기화 후 재활용까지 보류할 시간입니다. (초 단위)
     /// </summary>
-    public const int SessionDeferRecycleSeconds = 60;
+    public const int SessionDeferRecycleSeconds = 180;
 }
