@@ -420,7 +420,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "유효한 토큰이 아닙니다.")]
     [SwaggerResponse(StatusCodes.Status409Conflict, "게임에 참여하지 않은 유저입니다.")]
     [SwaggerResponse(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GameQuit([FromBody] AuthBody req)
+    public async Task<IActionResult> GameQuit([FromBody] GameQuitBody req)
     {
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
@@ -482,7 +482,7 @@ public class ToriController : Controller
             this.dbContext.GameUsers.Update(gameUser);
             await this.dbContext.SaveChangesAsync();
 
-            await this.SendUserStatusAsync(user, gameUser.PlayData!.SpentItems, now);
+            await this.SendUserStatusAsync(user, req.SpentItems, now);
             await transaction.CommitAsync();
 
             return this.Ok();
@@ -490,7 +490,7 @@ public class ToriController : Controller
         catch (Exception e)
         {
             return await this.HandleExceptionAsync(transaction, e,
-                "API HAS EXCEPTION - gamequit [token : {token}]", req.Token);
+                "API HAS EXCEPTION - gamequit [token : {token}, itemCount : {itemCount}]", req.Token, req.ItemCount);
         }
         finally
         {
