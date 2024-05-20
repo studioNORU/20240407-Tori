@@ -1,5 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using tori.AppApi;
+﻿using tori.AppApi;
 using tori.AppApi.Model;
 using tori.Models;
 using tori.Sessions;
@@ -34,15 +33,25 @@ public class SessionManager
             this.spinLock.Enter(ref lockTaken);
 
             if (!this.sessions.TryGetValue(roomInfo.RoomId, out var session))
-                return CreateSession();
-            
-            if (session.CanAcceptUser())
+            {
+                session = this.sessions.Values.FirstOrDefault(s => s.IsReusable());
+                if (session == null)
+                {
+                    session = new GameSession();
+                }
+                else
+                {
+                    this.sessions.Remove(session.RoomId);
+                }
+
+                InitSession(session);
+                this.sessions.Add(roomInfo.RoomId, session);
                 return session;
+            }
             
             if (session.IsReusable())
             {
-                var stage = SelectStage(dbContext);
-                session.SetActive(roomInfo, stage);
+                InitSession(session);
                 return session;
             }
 
@@ -53,14 +62,10 @@ public class SessionManager
             if (lockTaken) this.spinLock.Exit();
         }
         
-        GameSession CreateSession()
+        void InitSession(GameSession session)
         {
-            var roomId = roomInfo.RoomId;
             var stage = SelectStage(dbContext);
-            var session = new GameSession();
             session.SetActive(roomInfo, stage);
-            this.sessions.Add(roomId, session);
-            return session;
         }
     }
 
