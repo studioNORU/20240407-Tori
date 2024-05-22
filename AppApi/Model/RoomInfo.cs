@@ -6,9 +6,5 @@ public record RoomInfo(
     int RoomId,
     int PlayerCount,
     [property: JsonConverter(typeof(JsonStringConverter<GoodsInfo>))] GoodsInfo GoodsInfo,
-    [property: JsonConverter(typeof(JsonDateTimeConverter))] DateTime ExposureDay,
     [property: JsonConverter(typeof(JsonDateTimeConverter))] DateTime BeginRunningTime,
-    [property: JsonConverter(typeof(JsonDateTimeConverter))] DateTime EndRunningTime,
-    int PlayTime)
-{
-}
+    [property: JsonConverter(typeof(JsonDateTimeConverter))] DateTime EndRunningTime);

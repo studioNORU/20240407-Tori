@@ -12,7 +12,7 @@ public class ApiClient
     private readonly HttpClient client;
     private readonly JsonSerializerOptions serializerOptions = new()
     {
-        PropertyNamingPolicy = new JsonCamelToSnakePolicy(),
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true
     };
 
