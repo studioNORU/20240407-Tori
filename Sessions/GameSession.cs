@@ -1,9 +1,5 @@
-﻿using System.Text;
-using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using tori.AppApi;
+﻿using Microsoft.EntityFrameworkCore;
 using tori.AppApi.Model;
-using Tori.Controllers.Data;
 using tori.Core;
 using tori.Models;
 
@@ -71,29 +67,6 @@ public class GameSession
             this.GameEndAt = this.roomInfo.EndRunningTime;
             this.CloseAt = null;
             this.SentResult = false;
-        }
-        finally
-        {
-            if (lockTaken) this.spinLock.Exit();
-        }
-    }
-
-    public bool CanAcceptUser()
-    {
-        var now = DateTime.UtcNow;
-
-        // 생성되지 않은 방에는 입장 불가
-        if (now < this.CreatedAt) return false;
-        // 이미 게임이 시작된 방에는 입장 불가
-        if (this.GameStartAt <= now) return false;
-
-        var lockTaken = false;
-        try
-        {
-            this.spinLock.Enter(ref lockTaken);
-            
-            // 방에 입장 가능한 유저 수 제한을 지켜야 함
-            return this.activeUsers.Count < this.roomInfo.PlayerCount;
         }
         finally
         {
@@ -349,15 +322,39 @@ public class GameSession
         return ResultCode.Ok;
     }
 
+    private bool DisconnectInactiveUser(AppDbContext dbContext, DataFetcher dataFetcher, SessionUser user, DateTime now)
+    {
+        var gameUser = dbContext.GameUsers
+            .Include(u => u.PlayData)
+            .SingleOrDefault(u =>
+                u.UserId == user.UserId
+                && u.RoomId == this.RoomId);
+
+        if (gameUser == null) return false;
+        if (gameUser.Status != PlayStatus.Playing) return false;
+                
+        this.InternalLeaveUser(user, isQuit: true);
+                
+        gameUser.Status = PlayStatus.Disconnected;
+        gameUser.LeavedAt = now;
+        dbContext.GameUsers.Update(gameUser);
+        dbContext.SaveChanges();
+
+        var spentItems = gameUser.PlayData?.SpentItems ?? new Dictionary<int, int>();
+        var timestamp = gameUser.PlayData?.TimeStamp ?? now;
+        _ = dataFetcher.UpdateUserStatus(user, spentItems, timestamp);
+        return true;
+    }
+    
     /// <summary>
     /// 일정 시간 비활성화 상태인 (게임 기록 API가 호출되지 않은) 유저의 연결을 끊습니다. (<see cref="SessionManager">SessionManager</see>를 통해 접근해야 합니다)
     /// </summary>
-    /// <param name="apiClient">앱서버 API 클라이언트</param>
     /// <param name="dbContext">DB 컨텍스트</param>
+    /// <param name="dataFetcher">데이터 관리를 위한 인스턴스</param>
     /// <param name="now">현재 시간 (UTC)</param>
     /// <param name="inactivityThreshold">연결을 끊을 비활성화 상태 지속 시간</param>
     /// <returns>연결이 끊긴 비활성화 유저의 수</returns>
-    public int DisconnectInactiveUsers(ApiClient apiClient, AppDbContext dbContext, DateTime now, TimeSpan inactivityThreshold)
+    public int DisconnectInactiveUsers(AppDbContext dbContext, DataFetcher dataFetcher, DateTime now, TimeSpan inactivityThreshold)
     {
         var disconnected = 0;
         var lockTaken = false;
@@ -374,25 +371,8 @@ public class GameSession
                 if (user.PlaySession != this) continue;
                 if (user.HasLeft) continue;
 
-                var gameUser = dbContext.GameUsers
-                    .Include(u => u.PlayData)
-                    .SingleOrDefault(u =>
-                        u.UserId == user.UserId
-                        && u.RoomId == this.RoomId);
-                
-                if (gameUser == null) continue;
-                if (gameUser.Status != PlayStatus.Playing) continue;
-                
-                this.InternalLeaveUser(user, isQuit: true);
-                
-                gameUser.Status = PlayStatus.Disconnected;
-                gameUser.LeavedAt = now;
-                dbContext.GameUsers.Update(gameUser);
-                dbContext.SaveChanges();
-                
-                this.SendUserStatus(apiClient, user, gameUser.PlayData);
-                
-                disconnected++;
+                if (this.DisconnectInactiveUser(dbContext, dataFetcher, user, now))
+                    disconnected++;
             }
         }
         finally
@@ -402,37 +382,12 @@ public class GameSession
         return disconnected;
     }
 
-    private void SendUserStatus(ApiClient apiClient, SessionUser user, GamePlayData? playData)
-    {
-        var timestamp = playData?.TimeStamp ?? DateTime.UtcNow;
-        var playTime = timestamp - this.GameStartAt;
-        var spentEnergy = (int)Math.Floor(playTime.TotalMinutes) * Constants.EnergyCostPerMinutes;
-        var curStatus = new UserStatus(
-            user.UserId,
-            playData?.SpentItems ?? new Dictionary<int, int>(),
-            spentEnergy,
-            timestamp);
-        var delta = curStatus;
-
-        if (user.CachedStatus != null)
-        {
-            delta = user.CachedStatus.Delta(curStatus);
-        }
-
-        user.CachedStatus = delta;
-
-        _ = apiClient.PostAsync(API_URL.UserStatus, new StringContent(
-            JsonSerializer.Serialize(delta),
-            Encoding.UTF8,
-            "application/json"));
-    }
-
     /// <summary>
     /// 게임 결과를 앱 서버로 전송합니다. (<see cref="SessionManager">SessionManager</see>를 통해 접근해야 합니다)
     /// </summary>
-    /// <param name="apiClient">앱서버 API 클라이언트</param>
     /// <param name="dbContext">DB 컨텍스트</param>
-    public async Task SendResult(ApiClient apiClient, AppDbContext dbContext)
+    /// <param name="dataFetcher">데이터 관리를 위한 인스턴스</param>
+    public async Task SendResult(AppDbContext dbContext, DataFetcher dataFetcher)
     {
         var lockTaken = false;
 
@@ -447,17 +402,16 @@ public class GameSession
                 && p.RoomId == this.RoomId);
             var spentItems = firstPlayData?.SpentItems ?? new Dictionary<int, int>();
 
-            await apiClient.PostAsync(API_URL.Result, new StringContent(
-                JsonSerializer.Serialize(new GameResult
-                (
+            await dataFetcher.SendResult(
+                this.roomInfo,
+                new GameResult(
                     this.RoomId,
                     userIds,
                     new GameResultFirst(
                         first.Identifier.UserId,
                         spentItems,
-                        first.HostTime))),
-                Encoding.UTF8,
-                "application/json"));
+                        first.HostTime)));
+            
             this.SentResult = true;
         }
         finally

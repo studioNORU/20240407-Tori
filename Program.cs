@@ -26,6 +26,7 @@ try
     builder.Host.UseSerilog();
     builder.Services.AddDbContext<AppDbContext>();
     builder.Services.AddSingleton<ApiClient>();
+    builder.Services.AddSingleton<DataFetcher>();
     builder.Services.AddHostedService<UserHealthCheckService>();
     builder.Services.AddHostedService<PostGameResultService>();
     builder.Services.AddControllers(config =>

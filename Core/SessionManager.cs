@@ -1,5 +1,4 @@
-﻿using tori.AppApi;
-using tori.AppApi.Model;
+﻿using tori.AppApi.Model;
 using tori.Models;
 using tori.Sessions;
 
@@ -217,11 +216,11 @@ public class SessionManager
     /// <summary>
     /// 일정 시간 비활성화 상태인 (게임 기록 API가 호출되지 않은) 유저의 연결을 끊습니다.
     /// </summary>
-    /// <param name="apiClient">앱서버 API 클라이언트</param>
     /// <param name="dbContext">DB 컨텍스트</param>
+    /// <param name="dataFetcher">데이터 관리를 위한 인스턴스</param>
     /// <param name="inactivityThreshold">연결을 끊을 비활성화 상태 지속 시간</param>
     /// <returns>연결이 끊긴 비활성화 유저의 수</returns>
-    public int DisconnectInactiveUsers(ApiClient apiClient, AppDbContext dbContext, TimeSpan inactivityThreshold)
+    public int DisconnectInactiveUsers(AppDbContext dbContext, DataFetcher dataFetcher, TimeSpan inactivityThreshold)
     {
         var disconnected = 0;
         var now = DateTime.UtcNow;
@@ -232,7 +231,7 @@ public class SessionManager
 
             foreach (var session in this.sessions.Values)
             {
-                disconnected += session.DisconnectInactiveUsers(apiClient, dbContext, now, inactivityThreshold);
+                disconnected += session.DisconnectInactiveUsers(dbContext, dataFetcher, now, inactivityThreshold);
             }
         }
         finally
@@ -243,7 +242,12 @@ public class SessionManager
         return disconnected;
     }
 
-    public async Task PostGameResult(ApiClient apiClient, AppDbContext dbContext)
+    /// <summary>
+    /// 게임 결과를 앱 서버로 보냅니다.
+    /// </summary>
+    /// <param name="dbContext">DB 컨텍스트</param>
+    /// <param name="dataFetcher">데이터 관리를 위한 인스턴스</param>
+    public async Task PostGameResult(AppDbContext dbContext, DataFetcher dataFetcher)
     {
         var now = DateTime.UtcNow;
         var lockTaken = false;
@@ -256,7 +260,7 @@ public class SessionManager
                 if (session.SentResult) continue;
                 if (session.CloseAt == null || now < session.CloseAt) continue;
 
-                await session.SendResult(apiClient, dbContext);
+                await session.SendResult(dbContext, dataFetcher);
             }
         }
         finally

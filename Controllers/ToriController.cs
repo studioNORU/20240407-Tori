@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -6,7 +5,6 @@ using Microsoft.EntityFrameworkCore.Storage;
 using MySqlConnector;
 using Swashbuckle.AspNetCore.Annotations;
 using tori.AppApi;
-using tori.AppApi.Model;
 using Tori.Controllers.Data;
 using Tori.Controllers.Requests;
 using tori.Controllers.Responses;
@@ -23,12 +21,14 @@ public class ToriController : Controller
     private readonly ILogger<ToriController> logger;
     private readonly AppDbContext dbContext;
     private readonly ApiClient apiClient;
+    private readonly DataFetcher dataFetcher;
 
-    public ToriController(ILogger<ToriController> logger, AppDbContext dbContext, ApiClient apiClient)
+    public ToriController(ILogger<ToriController> logger, AppDbContext dbContext, ApiClient apiClient, DataFetcher dataFetcher)
     {
         this.logger = logger;
         this.dbContext = dbContext;
         this.apiClient = apiClient;
+        this.dataFetcher = dataFetcher;
     }
     
     // https://bold-meadow-582767.postman.co/workspace/meow~e50fbf18-f4b7-4c0d-a1b2-e0e2d151e54d/request/23935028-f9bcafb7-b36c-4f44-8ac2-4f5244a6bca4
@@ -71,30 +71,6 @@ public class ToriController : Controller
         return this.Problem(detail ?? "Failed to process operation", statusCode: StatusCodes.Status500InternalServerError);
     }
 
-    private async Task SendUserStatusAsync(SessionUser sessionUser, Dictionary<int, int> spentItems, DateTime timestamp)
-    {
-        var playTime = timestamp - sessionUser.PlaySession!.GameStartAt;
-        var spentEnergy = (int)Math.Floor(playTime.TotalMinutes) * Constants.EnergyCostPerMinutes;
-        var curStatus = new UserStatus(
-            sessionUser.UserId,
-            spentItems,
-            spentEnergy,
-            timestamp);
-        var delta = curStatus;
-
-        if (sessionUser.CachedStatus != null)
-        {
-            delta = sessionUser.CachedStatus.Delta(curStatus);
-        }
-
-        sessionUser.CachedStatus = curStatus;
-
-        await this.apiClient.PostAsync(API_URL.UserStatus, new StringContent(
-            JsonSerializer.Serialize(delta),
-            Encoding.UTF8,
-            "application/json"));
-    }
-
     [HttpPost]
     [Route("loading")]
     [SwaggerOperation("로딩", "게임 진입에 앞서 필요한 정보를 로딩합니다.")]
@@ -108,21 +84,23 @@ public class ToriController : Controller
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
-            var roomInfo = await this.apiClient.GetAsync<RoomInfo>(API_URL.RoomInfo, new Dictionary<string, string>
-            {
-                { "roomId", req.RoomId.ToString() },
-            });
+            var roomInfo = await this.dataFetcher.GetRoomInfo(req.RoomId);
 
             if (roomInfo == null)
                 throw new InvalidOperationException("Cannot found room info from APP API");
-            
-            var userInfo = await this.apiClient.GetAsync<UserInfo>(API_URL.UserInfo, new Dictionary<string, string>
-            {
-                { "userNo", req.UserId },
-            });
+
+            var userInfo = await this.dataFetcher.GetUserInfo(req.UserId);
 
             if (userInfo == null)
                 throw new InvalidOperationException("Cannot found user info from APP API");
+            
+#if !RELEASE
+            if (roomInfo is TestRoomInfo && userInfo is not TestUserInfo)
+                throw new InvalidOperationException("Cannot join normal user join to test room");
+            
+            if (roomInfo is not TestRoomInfo && userInfo is TestUserInfo)
+                throw new InvalidOperationException("Cannot join test user join to normal room");
+#endif
             
             var resultCode =
                 SessionManager.I.TryJoin(new UserIdentifier(req.UserId, userInfo.Nickname), roomInfo, this.dbContext,
@@ -394,7 +372,7 @@ public class ToriController : Controller
             this.dbContext.GameUsers.Update(gameUser);
             await this.dbContext.SaveChangesAsync();
 
-            await this.SendUserStatusAsync(user, req.SpentItems, now);
+            await this.dataFetcher.UpdateUserStatus(user, req.SpentItems, now);
             await transaction.CommitAsync();
             
             return this.Json(new GameEndResponse
@@ -482,7 +460,7 @@ public class ToriController : Controller
             this.dbContext.GameUsers.Update(gameUser);
             await this.dbContext.SaveChangesAsync();
 
-            await this.SendUserStatusAsync(user, req.SpentItems, now);
+            await this.dataFetcher.UpdateUserStatus(user, req.SpentItems, now);
             await transaction.CommitAsync();
 
             return this.Ok();
@@ -625,7 +603,7 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
-            await this.SendUserStatusAsync(user, gameUser.PlayData!.SpentItems, gameUser.PlayData!.TimeStamp);
+            await this.dataFetcher.UpdateUserStatus(user, gameUser.PlayData!.SpentItems, gameUser.PlayData!.TimeStamp);
             await transaction.CommitAsync();
             
             return this.Ok();

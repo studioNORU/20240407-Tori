@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using MySqlConnector;
 using Swashbuckle.AspNetCore.Annotations;
+using tori.AppApi.Model;
 using Tori.Controllers.Requests;
 using tori.Core;
 using tori.Models;
@@ -141,8 +142,9 @@ public class TestController : Controller
         if (!int.TryParse(req.UserId, out var userId)) return this.BadRequest();
         
         var expire = new DateTime(req.ExpireAtUtc);
-        var inventoryJson =
-            JsonSerializer.Serialize(req.Items.ToDictionary(it => int.Parse(it.Key), it => it.Value));
+        var inventoryJson = JsonSerializer.Serialize(req.Items
+            .Select(it => new ItemInfo(int.Parse(it.Key), it.Value))
+            .ToArray());
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {

@@ -1,7 +1,7 @@
 ﻿namespace tori.AppApi.Model;
 
 public record GameResultFirst(
-    int RoomId,
+    int UserId,
     Dictionary<int, int> SpentItems,
     float HostTime);
 

@@ -4,6 +4,7 @@ using tori.AppApi.Model;
 
 namespace tori.Models;
 
+#if !RELEASE
 public record TestUserInfo(
         int UserId,
         string Nickname,
@@ -34,3 +35,4 @@ public class TestUser
         JsonSerializer.Deserialize<ItemInfo[]>(this.InventoryJson)!,
         this.Energy);
 }
+#endif

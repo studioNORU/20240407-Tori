@@ -3,6 +3,7 @@ using tori.AppApi.Model;
 
 namespace tori.Models;
 
+#if !RELEASE
 public record TestRoomInfo(
         int RoomId,
         DateTime BeginRunningTime,
@@ -36,3 +37,4 @@ public class TestRoom
         this.BeginRunningTime,
         this.EndRunningTime);
 }
+#endif
