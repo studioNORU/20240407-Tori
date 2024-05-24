@@ -440,7 +440,7 @@ public class GameSession
         {
             this.spinLock.Enter(ref lockTaken);
 
-            var userIds = this.users.Select(u => u.UserId).ToList();
+            var userIds = this.users.Select(u => u.UserId).ToArray();
             var first = this.ranking.GetFirst();
             var firstPlayData = await dbContext.PlayData.SingleOrDefaultAsync(p =>
                 p.UserId == first.Identifier.UserId
@@ -448,17 +448,14 @@ public class GameSession
             var spentItems = firstPlayData?.SpentItems ?? new Dictionary<int, int>();
 
             await apiClient.PostAsync(API_URL.Result, new StringContent(
-                JsonSerializer.Serialize(new
-                {
-                    RoomId = this.RoomId,
-                    UserIds = userIds,
-                    First = new
-                    {
-                        UserId = first.Identifier.UserId,
-                        SpentItems = spentItems,
-                        HostTime = first.HostTime
-                    }
-                }),
+                JsonSerializer.Serialize(new GameResult
+                (
+                    this.RoomId,
+                    userIds,
+                    new GameResultFirst(
+                        first.Identifier.UserId,
+                        spentItems,
+                        first.HostTime))),
                 Encoding.UTF8,
                 "application/json"));
             this.SentResult = true;
