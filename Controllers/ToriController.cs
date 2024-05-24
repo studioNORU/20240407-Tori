@@ -95,28 +95,6 @@ public class ToriController : Controller
             "application/json"));
     }
 
-    #if DEBUG
-    private static DateTime TEMP_NOW = DateTime.UtcNow;
-    private static DateTime TEMP_BEGIN = TEMP_NOW.AddMinutes(1);
-    private static DateTime TEMP_END = TEMP_BEGIN.AddMinutes(1);
-    
-    private static RoomInfo TEMP_ROOM_INFO()
-    {
-        return new RoomInfo(
-            RoomId: 1,
-            PlayerCount: 50,
-            GoodsInfo: new GoodsInfo(
-                1000,
-                "https://image.gift-n.net/goods/0000001853_1.jpg",
-                83,
-                "0000001853",
-                "기프트레터 상품권",
-                "[기프트레터] 상품권 1천원"),
-            BeginRunningTime: TEMP_BEGIN,
-            EndRunningTime: TEMP_END);
-    }
-    #endif
-
     [HttpPost]
     [Route("loading")]
     [SwaggerOperation("로딩", "게임 진입에 앞서 필요한 정보를 로딩합니다.")]
@@ -138,11 +116,6 @@ public class ToriController : Controller
             if (roomInfo == null)
                 throw new InvalidOperationException("Cannot found room info from APP API");
             
-#if DEBUG
-            //TODO: 테스트를 위해 게임 방 정보를 위조합니다.
-            roomInfo = TEMP_ROOM_INFO();
-#endif
-
             var userInfo = await this.apiClient.GetAsync<UserInfo>(API_URL.UserInfo, new Dictionary<string, string>
             {
                 { "userNo", req.UserId },
