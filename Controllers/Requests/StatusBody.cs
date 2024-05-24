@@ -4,6 +4,6 @@ namespace Tori.Controllers.Requests;
 
 public record struct StatusBody
 {
-    [SwaggerSchema("플레이어 ID", Nullable = false)]
+    [SwaggerSchema("유저 ID", Nullable = false)]
     public string UserId { get; init; }
 }

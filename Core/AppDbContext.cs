@@ -11,6 +11,11 @@ public class AppDbContext : DbContext
     public DbSet<GameStage> GameStages { get; set; } = default!;
     public DbSet<GameUser> GameUsers { get; set; } = default!;
     public DbSet<GamePlayData> PlayData { get; set; } = default!;
+    
+#if !RELEASE
+    public DbSet<TestRoom> TestRooms { get; set; } = default!;
+    public DbSet<TestUser> TestUsers { get; set; } = default!;
+#endif
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

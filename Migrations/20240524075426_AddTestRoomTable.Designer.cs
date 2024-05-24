@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using tori.Core;
 
@@ -11,9 +12,11 @@ using tori.Core;
 namespace tori.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20240524075426_AddTestRoomTable")]
+    partial class AddTestRoomTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -112,58 +115,6 @@ namespace tori.Migrations
                     b.HasIndex("RoomId", "UserId");
 
                     b.ToTable("GameUsers");
-                });
-
-            modelBuilder.Entity("tori.Models.TestRoom", b =>
-                {
-                    b.Property<int>("RoomId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RoomId"));
-
-                    b.Property<DateTime>("BeginRunningTime")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime>("EndRunningTime")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime>("ExpireAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("RoomId");
-
-                    b.ToTable("TestRooms");
-                });
-
-            modelBuilder.Entity("tori.Models.TestUser", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("Energy")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("ExpireAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("InventoryJson")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("Nickname")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("WinCount")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TestUsers");
                 });
 
             modelBuilder.Entity("tori.Models.GamePlayData", b =>
