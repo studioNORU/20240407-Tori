@@ -31,14 +31,6 @@ public class ToriController : Controller
         this.dataFetcher = dataFetcher;
     }
     
-    // https://bold-meadow-582767.postman.co/workspace/meow~e50fbf18-f4b7-4c0d-a1b2-e0e2d151e54d/request/23935028-f9bcafb7-b36c-4f44-8ac2-4f5244a6bca4
-    // - [x] 게임 정보 기록할 DB 테이블 구성
-    // - [x] 게임 방 정보 앱 서버로부터 가져오기
-    // - [x] 로딩 API에 추가한 값 앱 서버로부터 가져오기
-    // - [x] 에너지 및 아이템 차감 처리하기
-    // - [x] 1분 간 게임 기록 API 호출이 없는 유저 이탈 처리하기
-    // - [x] 게임 결과 앱 서버로 보내기
-
     private static async Task<(ResultCode, SessionUser?)> ValidateToken(string token)
     {
         if (string.IsNullOrWhiteSpace(token)) return (ResultCode.InvalidParameter, null);
