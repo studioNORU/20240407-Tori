@@ -94,7 +94,7 @@ public class ToriController : Controller
             if (userInfo == null)
                 throw new InvalidOperationException("Cannot found user info from APP API");
             
-#if !RELEASE
+#if DEBUG || DEV
             if (roomInfo is TestRoomInfo && userInfo is not TestUserInfo)
                 throw new InvalidOperationException("Cannot join normal user join to test room");
             

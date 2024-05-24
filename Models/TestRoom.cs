@@ -3,7 +3,7 @@ using tori.AppApi.Model;
 
 namespace tori.Models;
 
-#if !RELEASE
+#if DEBUG || DEV
 public record TestRoomInfo(
         int RoomId,
         DateTime BeginRunningTime,

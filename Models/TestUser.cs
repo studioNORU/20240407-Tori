@@ -4,7 +4,7 @@ using tori.AppApi.Model;
 
 namespace tori.Models;
 
-#if !RELEASE
+#if DEBUG || DEV
 public record TestUserInfo(
         int UserId,
         string Nickname,

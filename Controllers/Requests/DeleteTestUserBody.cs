@@ -2,7 +2,7 @@
 
 namespace Tori.Controllers.Requests;
 
-#if !RELEASE
+#if DEBUG || DEV
 [SwaggerSchema("테스트를 위한 유저 정보 삭제를 위한 데이터입니다.")]
 public record struct DeleteTestUserBody
 {

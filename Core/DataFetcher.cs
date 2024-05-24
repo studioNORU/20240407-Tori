@@ -21,7 +21,7 @@ public class DataFetcher
     public async Task<RoomInfo?> GetRoomInfo(int roomId)
     {
         await using var scope = this.serviceProvider.CreateAsyncScope();
-    #if !RELEASE
+    #if DEBUG || DEV
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var test = await dbContext.TestRooms.SingleOrDefaultAsync(r => r.RoomId == roomId);
         if (test != null) return test.ToRoomInfo();
@@ -37,7 +37,7 @@ public class DataFetcher
     public async Task<UserInfo?> GetUserInfo(string userIdStr)
     {
         await using var scope = this.serviceProvider.CreateAsyncScope();
-    #if !RELEASE
+    #if DEBUG || DEV
         var userId = int.Parse(userIdStr);
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var test = await dbContext.TestUsers.SingleOrDefaultAsync(u => u.Id == userId);
@@ -51,7 +51,7 @@ public class DataFetcher
         });
     }
 
-#if !RELEASE
+#if DEBUG || DEV
     private async Task UpdateTestUser(int userId, int spentEnergy, UserStatus delta)
     {
         await using var scope = this.serviceProvider.CreateAsyncScope();
@@ -98,7 +98,7 @@ public class DataFetcher
 
         user.CachedStatus = curStatus;
 
-#if !RELEASE
+#if DEBUG || DEV
         if (user.UserInfo is TestUserInfo)
         {
             await this.UpdateTestUser(user.UserId, spentEnergy, delta);
@@ -116,7 +116,7 @@ public class DataFetcher
     {
         await using var scope = this.serviceProvider.CreateAsyncScope();
         
-#if !RELEASE
+#if DEBUG || DEV
         if (roomInfo is TestRoomInfo)
         {
             if (DateTime.UtcNow < roomInfo.EndRunningTime) return;

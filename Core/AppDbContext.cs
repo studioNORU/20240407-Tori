@@ -12,7 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<GameUser> GameUsers { get; set; } = default!;
     public DbSet<GamePlayData> PlayData { get; set; } = default!;
     
-#if !RELEASE
+#if DEBUG || DEV
     public DbSet<TestRoom> TestRooms { get; set; } = default!;
     public DbSet<TestUser> TestUsers { get; set; } = default!;
 #endif

@@ -11,7 +11,7 @@ using tori.Models;
 
 namespace Tori.Controllers;
 
-#if !RELEASE
+#if DEBUG || DEV
 [ApiController]
 [Route("[controller]")]
 public class TestController : Controller

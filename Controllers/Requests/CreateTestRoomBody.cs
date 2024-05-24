@@ -2,7 +2,7 @@
 
 namespace Tori.Controllers.Requests;
 
-#if !RELEASE
+#if DEBUG || DEV
 [SwaggerSchema("테스트를 위한 방 정보 등록을 위한 데이터입니다.")]
 public record struct CreateTestRoomBody
 {
