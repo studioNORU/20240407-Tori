@@ -24,7 +24,7 @@ public class DataFetcher
     #if DEBUG || DEV
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var test = await dbContext.TestRooms.SingleOrDefaultAsync(r => r.RoomId == roomId);
-        if (test != null) return test.ToRoomInfo();
+        if (test != null && test.ExpireAt < DateTime.UtcNow) return test.ToRoomInfo();
     #endif
         
         var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
@@ -41,7 +41,7 @@ public class DataFetcher
         var userId = int.Parse(userIdStr);
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var test = await dbContext.TestUsers.SingleOrDefaultAsync(u => u.Id == userId);
-        if (test != null) return test.ToUserInfo();
+        if (test != null && test.ExpireAt < DateTime.UtcNow) return test.ToUserInfo();
     #endif
         
         var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
@@ -57,7 +57,8 @@ public class DataFetcher
         await using var scope = this.serviceProvider.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         
-        var test = await dbContext.TestUsers.SingleAsync(u => u.Id == userId);
+        var test = await dbContext.TestUsers.SingleOrDefaultAsync(u => u.Id == userId);
+        if (test == null || test.ExpireAt < DateTime.UtcNow) return;
         if (test.Energy < spentEnergy) return;
 
         var inventory = JsonSerializer.Deserialize<ItemInfo[]>(test.InventoryJson)!
@@ -119,9 +120,12 @@ public class DataFetcher
 #if DEBUG || DEV
         if (roomInfo is TestRoomInfo)
         {
-            if (DateTime.UtcNow < roomInfo.EndRunningTime) return;
-
+            var now = DateTime.UtcNow;
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var test = await dbContext.TestRooms.SingleOrDefaultAsync(r => r.RoomId == roomInfo.RoomId);
+            if (test == null || test.ExpireAt < now) return;
+            if (now < test.EndRunningTime) return;
+
             var first = await dbContext.TestUsers.SingleOrDefaultAsync(u => u.Id == gameResult.First.UserId);
             if (first == null) return;
 
