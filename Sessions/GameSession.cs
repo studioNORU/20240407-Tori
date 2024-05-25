@@ -10,18 +10,18 @@ public class GameSession
     public int RoomId => this.roomInfo.RoomId;
     public string StageId { get; private set; } = default!;
 
-    private SpinLock spinLock;
+    private readonly SemaphoreSlim semaphoreSlim = new(1, 1);
     private RoomInfo roomInfo = default!;
     private readonly GameRanking ranking = new();
     
     /// <summary>
-    /// Require SpinLock to access<br/>
+    /// Require SemaphoreSlim to access<br/>
     /// gamestart API 호출 시점 ~ gameend / gamequit API 호출 시점 구간에 해당하는 유저들의 집합입니다.
     /// </summary>
     private readonly List<SessionUser> activeUsers = new();
     
     /// <summary>
-    /// Require SpinLock to access<br/>
+    /// Require SemaphoreSlim to access<br/>
     /// loading API를 통해 이 방에 진입한 적이 있는 모든 유저들의 집합입니다. (gameend나 gamequit을 통해 이탈해도 방 초기화 이전까지는 이 집합에 남습니다)
     /// </summary>
     private readonly List<SessionUser> users = new();
@@ -34,26 +34,24 @@ public class GameSession
     
     public IEnumerable<string> GetNicknames()
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
             return this.activeUsers.Select(user => user.Identifier.Nickname);
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
-    public void SetActive(RoomInfo roomInfo, GameStage stage)
+    public void SetActive(RoomInfo info, GameStage stage)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
             
-            this.roomInfo = roomInfo;
+            this.roomInfo = info;
             this.StageId = stage.StageId;
             
             if (this.activeUsers.Count != 0) throw new InvalidOperationException();
@@ -63,23 +61,22 @@ public class GameSession
 
             var now = DateTime.UtcNow;
             this.CreatedAt = now;
-            this.GameStartAt = roomInfo.BeginRunningTime;
+            this.GameStartAt = info.BeginRunningTime;
             this.GameEndAt = this.roomInfo.EndRunningTime;
             this.CloseAt = null;
             this.SentResult = false;
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
     public bool IsReusable()
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
             
             if (this.activeUsers.Count != 0) return false;
 
@@ -95,7 +92,7 @@ public class GameSession
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -104,10 +101,9 @@ public class GameSession
     /// </summary>
     public void ReserveClose()
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             var now = DateTime.UtcNow;
 
@@ -118,7 +114,7 @@ public class GameSession
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -129,10 +125,9 @@ public class GameSession
     /// <param name="user">입장한 유저 정보</param>
     public ResultCode JoinUser(UserIdentifier identifier, out SessionUser? user)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             user = null;
             if (this.activeUsers.Any(u => u.IsSame(identifier))) return ResultCode.AlreadyJoined;
@@ -169,7 +164,7 @@ public class GameSession
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
         
         bool InternalCanAcceptUser()
@@ -191,10 +186,9 @@ public class GameSession
     /// <param name="user">플레이를 시작한 유저</param>
     public ResultCode Start(SessionUser user)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             if (!user.HasJoined) return ResultCode.NotJoinedUser;
             if (!this.users.Any(x => x.IsSame(user))) return ResultCode.NotJoinedUser;
@@ -207,7 +201,7 @@ public class GameSession
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -218,10 +212,9 @@ public class GameSession
     /// <param name="isQuit">게임이 종료된 것이 아닌 포기일 때 true</param>
     public ResultCode LeaveUser(SessionUser user, bool isQuit = false)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             if (user.PlaySession != this) return ResultCode.NotJoinedUser;
             if (user.HasLeft) return ResultCode.NotJoinedUser;
@@ -231,7 +224,7 @@ public class GameSession
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -252,10 +245,9 @@ public class GameSession
     {
         user = default!;
         
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             var found = this.users.FirstOrDefault(u => u.IsSame(identifier));
             if (found == null) return ResultCode.NotJoinedUser;
@@ -265,7 +257,7 @@ public class GameSession
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
     
@@ -275,16 +267,15 @@ public class GameSession
     /// <param name="userId">찾고 있는 유저의 ID</param>
     public SessionUser? TryGetUser(int userId)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             return this.users.FirstOrDefault(u => u.UserId == userId);
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -357,10 +348,9 @@ public class GameSession
     public int DisconnectInactiveUsers(AppDbContext dbContext, DataFetcher dataFetcher, DateTime now, TimeSpan inactivityThreshold)
     {
         var disconnected = 0;
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             var inactiveUsers = this.activeUsers
                 .Where(u => inactivityThreshold <= now - u.LastActiveAt)
@@ -377,7 +367,7 @@ public class GameSession
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
         return disconnected;
     }
@@ -389,11 +379,9 @@ public class GameSession
     /// <param name="dataFetcher">데이터 관리를 위한 인스턴스</param>
     public async Task SendResult(AppDbContext dbContext, DataFetcher dataFetcher)
     {
-        var lockTaken = false;
-
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            await this.semaphoreSlim.WaitAsync();
 
             var userIds = this.users.Select(u => u.UserId).ToArray();
             var first = this.ranking.GetFirst();
@@ -416,7 +404,7 @@ public class GameSession
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 }

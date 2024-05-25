@@ -9,10 +9,10 @@ public class SessionManager
     private static SessionManager? instance;
     public static SessionManager I => instance ??= new SessionManager();
 
-    private SpinLock spinLock;
+    private readonly SemaphoreSlim semaphoreSlim = new(1, 1);
     
     /// <summary>
-    /// Require SpinLock to access
+    /// Require SemaphoreSlim to access
     /// </summary>
     private readonly Dictionary<int, GameSession> sessions = new();
     
@@ -26,10 +26,9 @@ public class SessionManager
     
     private GameSession GetActiveSession(AppDbContext dbContext, RoomInfo roomInfo)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             if (!this.sessions.TryGetValue(roomInfo.RoomId, out var session))
             {
@@ -58,7 +57,7 @@ public class SessionManager
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
         
         void InitSession(GameSession session)
@@ -70,10 +69,9 @@ public class SessionManager
 
     private GameSession? GetResumableSession(AppDbContext dbContext, UserIdentifier identifier)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             var gameUser = dbContext.GameUsers.SingleOrDefault(u =>
                 u.UserId == identifier.UserId
@@ -104,7 +102,7 @@ public class SessionManager
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -128,10 +126,9 @@ public class SessionManager
     /// <param name="user">플레이를 시작한 유저</param>
     public ResultCode Start(SessionUser user)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             if (user.PlaySession == null || !this.sessions.ContainsValue(user.PlaySession))
                 return ResultCode.SessionNotFound;
@@ -140,7 +137,7 @@ public class SessionManager
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
     
@@ -151,10 +148,9 @@ public class SessionManager
     /// <param name="isQuit">게임이 종료된 것이 아닌 포기일 때 true</param>
     public ResultCode TryLeave(SessionUser user, bool isQuit)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             if (user.PlaySession == null || !this.sessions.ContainsValue(user.PlaySession))
                 return ResultCode.SessionNotFound;
@@ -163,7 +159,7 @@ public class SessionManager
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -175,10 +171,9 @@ public class SessionManager
     public ResultCode TryGetUser(TokenData tokenData, out SessionUser user)
     {
         user = default!;
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
             
             if (this.sessions.TryGetValue(tokenData.RoomId, out var session))
                 return session.TryGetUser(tokenData.User, out user);
@@ -187,7 +182,7 @@ public class SessionManager
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -198,10 +193,9 @@ public class SessionManager
     /// <param name="roomId">게임 방 ID</param>
     public SessionUser? TryGetUser(int userId, int roomId)
     {
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             if (this.sessions.TryGetValue(roomId, out var session))
                 return session.TryGetUser(userId);
@@ -210,7 +204,7 @@ public class SessionManager
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 
@@ -225,10 +219,9 @@ public class SessionManager
     {
         var disconnected = 0;
         var now = DateTime.UtcNow;
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            this.semaphoreSlim.Wait();
 
             foreach (var session in this.sessions.Values)
             {
@@ -237,7 +230,7 @@ public class SessionManager
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
 
         return disconnected;
@@ -251,10 +244,9 @@ public class SessionManager
     public async Task PostGameResult(AppDbContext dbContext, DataFetcher dataFetcher)
     {
         var now = DateTime.UtcNow;
-        var lockTaken = false;
         try
         {
-            this.spinLock.Enter(ref lockTaken);
+            await this.semaphoreSlim.WaitAsync();
 
             foreach (var session in this.sessions.Values)
             {
@@ -266,7 +258,7 @@ public class SessionManager
         }
         finally
         {
-            if (lockTaken) this.spinLock.Exit();
+            this.semaphoreSlim.Release();
         }
     }
 }
