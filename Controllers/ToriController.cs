@@ -119,13 +119,18 @@ public class ToriController : Controller
                 u.RoomId == session.RoomId
                 && u.UserId == user.UserId);
 
+            var status = PlayStatus.Ready;
+            if (session.GameStartAt <= now)
+            {
+                status = PlayStatus.Playing;
+            }
             if (duplicate == null)
             {
                 await this.dbContext.GameUsers.AddAsync(new GameUser
                 {
                     RoomId = session.RoomId,
                     UserId = user.UserId,
-                    Status = PlayStatus.Ready,
+                    Status = status,
                     JoinedAt = user.JoinedAt,
                     LeavedAt = null,
                     PlayData = null,
@@ -143,10 +148,7 @@ public class ToriController : Controller
                     this.dbContext.PlayData.Remove(duplicate.PlayData);
                 }
 
-                if (session.GameStartAt <= now)
-                {
-                    duplicate.Status = PlayStatus.Playing;
-                }
+                duplicate.Status = status;
                 duplicate.JoinedAt = user.JoinedAt;
                 duplicate.LeavedAt = null;
                 duplicate.PlayData = null;
