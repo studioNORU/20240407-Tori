@@ -46,7 +46,7 @@ public class DataFetcher
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var test = await dbContext.TestUsers.SingleOrDefaultAsync(u => u.Id == userId);
         var now = DateTime.UtcNow;
-        this.logger.LogInformation("GET TEST ROOM - [userId : {userId}, expireAt : {expireAt}, now : {now}]", userIdStr, test?.ExpireAt.ToString() ?? "(null)", now);
+        this.logger.LogInformation("GET TEST USER - [userId : {userId}, expireAt : {expireAt}, now : {now}]", userIdStr, test?.ExpireAt.ToString() ?? "(null)", now);
         if (test != null && now < test.ExpireAt) return test.ToUserInfo();
     #endif
         

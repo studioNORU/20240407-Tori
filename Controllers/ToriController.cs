@@ -452,6 +452,14 @@ public class ToriController : Controller
             gameUser.LeavedAt = now;
             this.dbContext.GameUsers.Update(gameUser);
             await this.dbContext.SaveChangesAsync();
+            
+#if DEBUG || DEV
+            if (user.UserInfo is TestUserInfo)
+            {
+                this.dbContext.GameUsers.Remove(gameUser);
+                await this.dbContext.SaveChangesAsync();
+            }
+#endif
 
             await this.dataFetcher.UpdateUserStatus(user, req.SpentItems, now);
             await transaction.CommitAsync();
