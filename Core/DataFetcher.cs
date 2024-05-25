@@ -28,7 +28,7 @@ public class DataFetcher
         var test = await dbContext.TestRooms.SingleOrDefaultAsync(r => r.RoomId == roomId);
         var now = DateTime.UtcNow;
         this.logger.LogInformation("GET TEST ROOM - [roomId : {roomId}, expireAt : {expireAt}, now : {now}]", roomId, test?.ExpireAt.ToString() ?? "(null)", now);
-        if (test != null && test.ExpireAt < now) return test.ToRoomInfo();
+        if (test != null && now < test.ExpireAt) return test.ToRoomInfo();
     #endif
         
         var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
@@ -47,7 +47,7 @@ public class DataFetcher
         var test = await dbContext.TestUsers.SingleOrDefaultAsync(u => u.Id == userId);
         var now = DateTime.UtcNow;
         this.logger.LogInformation("GET TEST ROOM - [userId : {userId}, expireAt : {expireAt}, now : {now}]", userIdStr, test?.ExpireAt.ToString() ?? "(null)", now);
-        if (test != null && test.ExpireAt < DateTime.UtcNow) return test.ToUserInfo();
+        if (test != null && now < test.ExpireAt) return test.ToUserInfo();
     #endif
         
         var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
