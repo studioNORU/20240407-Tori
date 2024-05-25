@@ -131,7 +131,7 @@ public class ToriController : Controller
                     PlayData = null,
                 });
             }
-            else if (duplicate.Status is PlayStatus.Disconnected or PlayStatus.Quit or PlayStatus.Done)
+            else if (duplicate.Status is PlayStatus.Disconnected or PlayStatus.Quit)
             {
                 await transaction.RollbackAsync();
                 return this.Conflict();
