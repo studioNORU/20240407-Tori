@@ -11,20 +11,24 @@ namespace tori.Core;
 
 public class DataFetcher
 {
+    private readonly ILogger<DataFetcher> logger;
     private readonly IServiceProvider serviceProvider;
 
-    public DataFetcher(IServiceProvider serviceProvider)
+    public DataFetcher(ILogger<DataFetcher> logger, IServiceProvider serviceProvider)
     {
+        this.logger = logger;
         this.serviceProvider = serviceProvider;
     }
 
     public async Task<RoomInfo?> GetRoomInfo(int roomId)
     {
         await using var scope = this.serviceProvider.CreateAsyncScope();
-    #if DEBUG || DEV
+#if DEBUG || DEV
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var test = await dbContext.TestRooms.SingleOrDefaultAsync(r => r.RoomId == roomId);
-        if (test != null && test.ExpireAt < DateTime.UtcNow) return test.ToRoomInfo();
+        var now = DateTime.UtcNow;
+        this.logger.LogInformation("GET TEST ROOM - [roomId : {roomId}, expireAt : {expireAt}, now : {now}]", roomId, test?.ExpireAt.ToString() ?? "(null)", now);
+        if (test != null && test.ExpireAt < now) return test.ToRoomInfo();
     #endif
         
         var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
@@ -41,6 +45,8 @@ public class DataFetcher
         var userId = int.Parse(userIdStr);
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var test = await dbContext.TestUsers.SingleOrDefaultAsync(u => u.Id == userId);
+        var now = DateTime.UtcNow;
+        this.logger.LogInformation("GET TEST ROOM - [userId : {userId}, expireAt : {expireAt}, now : {now}]", userIdStr, test?.ExpireAt.ToString() ?? "(null)", now);
         if (test != null && test.ExpireAt < DateTime.UtcNow) return test.ToUserInfo();
     #endif
         

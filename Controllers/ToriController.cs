@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using MySqlConnector;
 using Swashbuckle.AspNetCore.Annotations;
-using tori.AppApi;
 using Tori.Controllers.Data;
 using Tori.Controllers.Requests;
 using tori.Controllers.Responses;
@@ -20,14 +19,12 @@ public class ToriController : Controller
 {
     private readonly ILogger<ToriController> logger;
     private readonly AppDbContext dbContext;
-    private readonly ApiClient apiClient;
     private readonly DataFetcher dataFetcher;
 
-    public ToriController(ILogger<ToriController> logger, AppDbContext dbContext, ApiClient apiClient, DataFetcher dataFetcher)
+    public ToriController(ILogger<ToriController> logger, AppDbContext dbContext, DataFetcher dataFetcher)
     {
         this.logger = logger;
         this.dbContext = dbContext;
-        this.apiClient = apiClient;
         this.dataFetcher = dataFetcher;
     }
     
@@ -71,6 +68,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(LoadingResponse))]
     public async Task<IActionResult> Loading([FromBody] LoadingBody req)
     {
+        this.logger.LogInformation("[POST] /tori/loading - [body : {json}]", JsonSerializer.Serialize(req));
         if (string.IsNullOrWhiteSpace(req.UserId)) return this.BadRequest();
 
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
@@ -200,6 +198,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameStartResponse))]
     public async Task<IActionResult> GameStart([FromBody] AuthBody req)
     {
+        this.logger.LogInformation("[POST] /tori/gamestart - [body : {json}]", JsonSerializer.Serialize(req));
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
@@ -291,6 +290,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(GameEndResponse))]
     public async Task<IActionResult> GameEnd([FromBody] PlayInfoBody req)
     {
+        this.logger.LogInformation("[POST] /tori/gameend - [body : {json}]", JsonSerializer.Serialize(req));
         if (req.HostTime < 0) return this.BadRequest();
         if (req.ItemCount < 0) return this.BadRequest();
 
@@ -392,6 +392,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> GameQuit([FromBody] GameQuitBody req)
     {
+        this.logger.LogInformation("[POST] /tori/gamequit - [body : {json}]", JsonSerializer.Serialize(req));
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
@@ -476,6 +477,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> PlayData([FromBody] PlayDataBody req)
     {
+        this.logger.LogInformation("[POST] /tori/play-data - [body : {json}]", JsonSerializer.Serialize(req));
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
@@ -567,6 +569,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> Status([FromBody] StatusBody req)
     {
+        this.logger.LogInformation("[POST] /tori/status - [body : {json}]", JsonSerializer.Serialize(req));
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
@@ -620,6 +623,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
     public async Task<IActionResult> Ranking([FromBody] PlayInfoBody req)
     {
+        this.logger.LogInformation("[POST] /tori/ranking - [body : {json}]", JsonSerializer.Serialize(req));
         try
         {
             if (req.HostTime < 0) return this.BadRequest();
@@ -687,6 +691,7 @@ public class ToriController : Controller
     [SwaggerResponse(StatusCodes.Status200OK, type: typeof(RankingResponse))]
     public async Task<IActionResult> Result([FromBody] AuthBody req)
     {
+        this.logger.LogInformation("[POST] /tori/result - [body : {json}]", JsonSerializer.Serialize(req));
         try
         {
             var (resultCode, user) = await ValidateToken(req.Token);

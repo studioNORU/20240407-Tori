@@ -50,6 +50,7 @@ public class TestController : Controller
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> CreateTestRoom([FromBody] CreateTestRoomBody req)
     {
+        this.logger.LogInformation("[POST] /test/room - [body : {json}]", JsonSerializer.Serialize(req));
         var begin = new DateTime(req.GameStartUtc);
         var end = new DateTime(req.GameEndUtc);
         var expire = new DateTime(req.ExpireAtUtc);
@@ -102,6 +103,7 @@ public class TestController : Controller
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteTestRoom([FromBody] DeleteTestRoomBody req)
     {
+        this.logger.LogInformation("[DELETE] /test/room - [body : {json}]", JsonSerializer.Serialize(req));
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
@@ -139,6 +141,7 @@ public class TestController : Controller
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> CreateTestUser([FromBody] CreateTestUserBody req)
     {
+        this.logger.LogInformation("[POST] /test/user - [body : {json}]", JsonSerializer.Serialize(req));
         if (!int.TryParse(req.UserId, out var userId)) return this.BadRequest();
         
         var expire = new DateTime(req.ExpireAtUtc);
@@ -198,6 +201,7 @@ public class TestController : Controller
     [SwaggerResponse(StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteTestUser([FromBody] DeleteTestUserBody req)
     {
+        this.logger.LogInformation("[DELETE] /test/user - [body : {json}]", JsonSerializer.Serialize(req));
         if (!int.TryParse(req.UserId, out var userId)) return this.BadRequest();
         
         var transaction = await this.dbContext.Database.BeginTransactionAsync();

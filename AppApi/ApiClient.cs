@@ -22,12 +22,13 @@ public class ApiClient
         {
             ServerCertificateCustomValidationCallback = (msg, cert, chain, sslPolicyErrors) =>
             {
-                if (sslPolicyErrors == SslPolicyErrors.None) return true;
+#if DEBUG || DEV
+                return true;
+#endif
                 
-                //NOTE: 개발용 API 서버의 인증서 문제가 있어 해당 인증서에 대해서만 인증서 관련 오류를 무시하도록 합니다.
-                return cert?.GetCertHashString(HashAlgorithmName.SHA256).Equals(
-                    "59a8356662f1e995978cd92bceb3282b0b5ece9c8dedb069808a219227306304",
-                    StringComparison.InvariantCultureIgnoreCase) == true;
+                if (sslPolicyErrors == SslPolicyErrors.None) return true;
+
+                return false;
             }
         };
         
