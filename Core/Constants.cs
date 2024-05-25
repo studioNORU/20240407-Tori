@@ -10,12 +10,12 @@ public static class Constants
     /// <summary>
     /// 일정 시간 게임 기록 API의 호출이 없는 유저를 탐지할 시간 간격입니다. (초 단위)
     /// </summary>
-    public const int UserHealthCheckIntervalSeconds = 10;
+    public const int UserHealthCheckIntervalSeconds = 1;
 
     /// <summary>
     /// 게임 기록 API 호출이 없는 유저를 게임에 유지시킬 시간입니다. (초 단위)
     /// </summary>
-    public const int UserHealthCheckThresholdSeconds = 60;
+    public const int UserHealthCheckThresholdSeconds = 66;
 
     /// <summary>
     /// 집계가 종료된 게임의 결과를 보내는 주기입니다. (초 단위)
