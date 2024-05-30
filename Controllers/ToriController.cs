@@ -173,7 +173,7 @@ public class ToriController : Controller
                 Energy = userInfo.Energy,
                 WinnerCount = userInfo.WinCount,
                 Items = userInfo.Inventory.ToDictionary(i => i.ItemNo.ToString(), i => i.ItemCount),
-                GameReward = roomInfo.GoodsInfo.ToReward(),
+                GameReward = roomInfo.GoodsInfo.ToReward(roomInfo.ToEnum()),
                 GameStartUtc = session.GameStartAt.Ticks,
                 GameEndUtc = session.GameEndAt.Ticks,
                 CurrentTick = now.Ticks,

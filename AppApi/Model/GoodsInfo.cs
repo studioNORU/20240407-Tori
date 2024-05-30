@@ -10,13 +10,14 @@ public record GoodsInfo(
     string BrandName,
     string GoodsName)
 {
-    public GameReward ToReward() => new()
+    public GameReward ToReward(GameReward.RewardTypes type) => new()
     {
         Price = this.Price,
         BrandId = this.BrandId,
         GoodsId = this.GoodsId,
         BrandName = this.BrandName,
         GoodsName = this.GoodsName,
-        RewardImage = this.ImgUrl
+        RewardImage = this.ImgUrl,
+        RewardType = type
     };
 }

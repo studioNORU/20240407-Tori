@@ -5,6 +5,9 @@ namespace Tori.Controllers.Data;
 [SwaggerSchema("게임 경품 정보")]
 public record GameReward
 {
+    [SwaggerSchema("0 = 내부 상품 / 1 = 외부 상품")]
+    public enum RewardTypes { Internal, External }
+    
     [SwaggerSchema("가격", Nullable = false)]
     public int Price { get; init; }
     
@@ -22,4 +25,7 @@ public record GameReward
 
     [SwaggerSchema("이미지 URL", Nullable = false)]
     public string RewardImage { get; init; } = default!;
+    
+    [SwaggerSchema("외부/내부 상품 구분", Nullable = false)]
+    public RewardTypes RewardType { get; init; }
 }

@@ -11,6 +11,7 @@ public record TestRoomInfo(
     : RoomInfo(
         RoomId,
         50,
+        "I",
         new GoodsInfo(
             1000,
             "https://image.gift-n.net/goods/0000001853_1.jpg",
