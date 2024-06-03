@@ -84,6 +84,7 @@ public class DataFetcher
             
         dbContext.TestUsers.Update(test);
         await dbContext.SaveChangesAsync();
+        this.logger.LogInformation("[UpdateTestUser] Updated test user [userId : {userId}, energy : {energy}, inventory : {inventory}]", userId, test.Energy, test.InventoryJson);
     }
 #endif
     
@@ -112,16 +113,20 @@ public class DataFetcher
             return;
         }
 #endif
-        
+
+        var json = JsonSerializer.Serialize(delta);
         await apiClient.PostAsync(API_URL.UserStatus, new StringContent(
-            JsonSerializer.Serialize(delta),
+            json,
             Encoding.UTF8,
             "application/json"));
+        this.logger.LogInformation("[UpdateUserStatus] Sent UserStatus request [userId : {userId}, json : {json}]", user.UserId, json);
     }
 
     public async Task SendResult(RoomInfo roomInfo, GameResult gameResult)
     {
         await using var scope = this.serviceProvider.CreateAsyncScope();
+        var json = JsonSerializer.Serialize(gameResult);
+        this.logger.LogInformation("[SendResult] Send game result requested [roomId : {roomId}, json : {json}]", roomInfo.RoomId, json);
         
 #if DEBUG || DEV
         if (roomInfo is TestRoomInfo)
@@ -129,24 +134,38 @@ public class DataFetcher
             var now = DateTime.UtcNow;
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var test = await dbContext.TestRooms.SingleOrDefaultAsync(r => r.RoomId == roomInfo.RoomId);
-            if (test == null || test.ExpireAt < now) return;
-            if (now < test.EndRunningTime) return;
+            if (test == null || test.ExpireAt < now)
+            {
+                this.logger.LogInformation("[SendResult] TestRoom not found [roomId : {roomId}]", roomInfo.RoomId);
+                return;
+            }
+            if (now < test.EndRunningTime)
+            {
+                this.logger.LogInformation("[SendResult] TestRoom still playing [roomId : {roomId}]", roomInfo.RoomId);
+                return;
+            }
 
             var first = await dbContext.TestUsers.SingleOrDefaultAsync(u => u.Id == gameResult.First.UserId);
-            if (first == null) return;
+            if (first == null)
+            {
+                this.logger.LogInformation("[SendResult] TestUser not found [roomId : {roomId}, winnerId : {userId}]", roomInfo.RoomId, gameResult.First.UserId);
+                return;
+            }
 
             first.WinCount++;
             
             dbContext.TestUsers.Update(first);
             await dbContext.SaveChangesAsync();
+            this.logger.LogInformation("[SendResult] TestRoom processed game result successfully");
             return;
         }
 #endif
         
         var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
         await apiClient.PostAsync(API_URL.Result, new StringContent(
-            JsonSerializer.Serialize(gameResult),
+            json,
             Encoding.UTF8,
             "application/json"));
+        this.logger.LogInformation("[SendResult] Sent Result request [roomId : {roomId}, json : {json}]", roomInfo.RoomId, json);
     }
 }

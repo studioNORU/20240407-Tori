@@ -19,6 +19,13 @@
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
+    "http (Release)": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5047"
+    },
     "https": {
       "commandName": "Project",
       "dotnetRunMessages": true,

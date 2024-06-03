@@ -23,7 +23,16 @@ public class PostGameResultService : BackgroundService
             var transaction = await dbContext.Database.BeginTransactionAsync(stoppingToken);
             try
             {
-                await SessionManager.I.PostGameResult(dbContext, this.dataFetcher);
+                var sent = await SessionManager.I.PostGameResult(dbContext, this.dataFetcher);
+                if (sent.Any())
+                {
+                    foreach (var session in sent)
+                    {
+                        this.logger.LogInformation("Sent result from {roomId} [gameEnd : {gameEndAt}, closed : {closeAt}]", session.RoomId, session.GameEndAt, session.CloseAt);
+                    }
+                }
+                else this.logger.LogInformation("There's no finished game session");
+                
                 await transaction.CommitAsync(stoppingToken);
                 await Task.Delay(this.interval, stoppingToken);
             }

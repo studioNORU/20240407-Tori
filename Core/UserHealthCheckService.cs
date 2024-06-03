@@ -28,6 +28,7 @@ public class UserHealthCheckService : BackgroundService
                 var disconnected =
                     SessionManager.I.DisconnectInactiveUsers(dbContext, this.dataFetcher, this.threshold);
                 if (0 < disconnected) this.logger.LogInformation("Disconnected {count} inactive users", disconnected);
+                
                 await transaction.CommitAsync(stoppingToken);
                 await Task.Delay(this.interval, stoppingToken);
             }

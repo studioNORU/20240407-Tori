@@ -241,9 +241,10 @@ public class SessionManager
     /// </summary>
     /// <param name="dbContext">DB 컨텍스트</param>
     /// <param name="dataFetcher">데이터 관리를 위한 인스턴스</param>
-    public async Task PostGameResult(AppDbContext dbContext, DataFetcher dataFetcher)
+    public async Task<IReadOnlyList<GameSession>> PostGameResult(AppDbContext dbContext, DataFetcher dataFetcher)
     {
         var now = DateTime.UtcNow;
+        var sent = new List<GameSession>();
         try
         {
             await this.semaphoreSlim.WaitAsync();
@@ -254,7 +255,10 @@ public class SessionManager
                 if (session.CloseAt == null || now < session.CloseAt) continue;
 
                 await session.SendResult(dbContext, dataFetcher);
+                if (session.SentResult) sent.Add(session);
             }
+
+            return sent;
         }
         finally
         {
