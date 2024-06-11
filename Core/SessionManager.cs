@@ -67,7 +67,7 @@ public class SessionManager
         }
     }
 
-    private GameSession? GetResumableSession(AppDbContext dbContext, UserIdentifier identifier)
+    public GameSession? GetResumableSession(AppDbContext dbContext, UserIdentifier identifier)
     {
         try
         {
@@ -120,6 +120,11 @@ public class SessionManager
         return session.JoinUser(identifier, out user);
     }
 
+    public GameSession? GetSession(int roomId)
+    {
+        return this.sessions.TryGetValue(roomId, out var session) ? session : null;
+    }
+    
     /// <summary>
     /// 유저가 세션에서 플레이를 시작합니다
     /// </summary>

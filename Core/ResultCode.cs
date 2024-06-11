@@ -9,4 +9,12 @@ public enum ResultCode
     AlreadyJoined,
     SessionNotFound,
     NotJoinedUser,
+    
+    CannotJoinToStartedGame = 100,
+    CannotJoinToEndedGame,
+    CannotJoinToFullRoom,
+    CannotJoinToRoomBeforePreload,
+    DataNotFound,
+    CannotUseBothNormalTest,
+    CanResumeGame,
 }

@@ -59,6 +59,134 @@ public class ToriController : Controller
 
         return this.Problem(detail ?? "Failed to process operation", statusCode: StatusCodes.Status500InternalServerError);
     }
+    
+    [HttpPost]
+    [Route("dev-check")]
+    [SwaggerOperation("[테스트용] 게임 접속 가능 여부 조회", "게임 접속이 가능한지와 관련 정보를 조회합니다.")]
+    public async Task<IActionResult> Check([FromBody] LoadingBody req)
+    {
+        this.logger.LogInformation("[POST] /tori/dev-check - [body : {json}]", JsonSerializer.Serialize(req));
+
+        var now = DateTime.UtcNow;
+        var res = new DevCheckResponse
+        {
+            CurrentTick = now.Ticks,
+            RequestedKst = ToKstString(now),
+        };
+
+        if (string.IsNullOrWhiteSpace(req.UserId) || !int.TryParse(req.UserId, out _))
+        {
+            res.ResultCode = ResultCode.InvalidParameter;
+            res.Message = "UserId는 정수형을 사용해야합니다.";
+            return this.Ok(res);
+        }
+
+        var transaction = await this.dbContext.Database.BeginTransactionAsync();
+        try
+        {
+            var roomInfo = await this.dataFetcher.GetRoomInfo(req.RoomId);
+
+            if (roomInfo == null)
+            {
+                res.ResultCode = ResultCode.DataNotFound;
+                res.Message = "게임 방 정보를 찾지 못했습니다.";
+                return this.Ok(res);
+            }
+
+            res.RoomId = roomInfo.RoomId;
+            res.GameReward = roomInfo.GoodsInfo.ToReward(roomInfo.ToEnum());
+            res.GameStartKst = ToKstString(roomInfo.BeginRunningTime);
+            res.GameEndKst = ToKstString(roomInfo.EndRunningTime);
+
+            var userInfo = await this.dataFetcher.GetUserInfo(req.UserId);
+
+            if (userInfo == null)
+            {
+                res.ResultCode = ResultCode.DataNotFound;
+                res.Message = "유저 정보를 찾지 못했습니다.";
+                return this.Ok(res);
+            }
+            
+#if DEBUG || DEV
+            if (roomInfo is TestRoomInfo && userInfo is not TestUserInfo)
+            {
+                res.ResultCode = ResultCode.CannotUseBothNormalTest;
+                res.Message = "일반 유저는 디버깅을 위한 테스트 방에 접근할 수 없습니다.";
+                return this.Ok(res);
+            }
+
+            if (roomInfo is not TestRoomInfo && userInfo is TestUserInfo)
+            {
+                res.ResultCode = ResultCode.CannotUseBothNormalTest;
+                res.Message = "디버깅을 위한 테스트 유저는 일반 게임 방에 접근할 수 없습니다.";
+                return this.Ok(res);
+            }
+#endif
+
+            if (now <= roomInfo.BeginRunningTime.AddMinutes(-Constants.PreloadDurationMinutes))
+            {
+                res.ResultCode = ResultCode.CannotJoinToRoomBeforePreload;
+                res.Message = $"게임 시작 시간으로부터 ${Constants.PreloadDurationMinutes} 분 전부터 로딩 가능합니다. 그 이전에는 로딩을 할 수 없습니다.";
+                return this.Ok(res);
+            }
+
+            if (roomInfo.EndRunningTime <= now)
+            {
+                res.ResultCode = ResultCode.CannotJoinToEndedGame;
+                res.Message = "게임이 종료된 방에는 참가할 수 없습니다.";
+                return this.Ok(res);
+            }
+
+            var userIdentifier = new UserIdentifier(req.UserId, userInfo.Nickname);
+            if (roomInfo.BeginRunningTime <= now)
+            {
+                if (SessionManager.I.GetResumableSession(this.dbContext, userIdentifier) != null)
+                {
+                    res.ResultCode = ResultCode.CanResumeGame;
+                    res.Message = "게임이 진행 중인 방이지만, 해당 유저는 이어서 플레이를 하기 위해 로딩을 요청할 수 있습니다.";
+                }
+                else
+                {
+                    res.ResultCode = ResultCode.CannotJoinToStartedGame;
+                    res.Message = "게임이 진행 중인 방에 도중 참가는 허용되지 않습니다.";
+                }
+
+                return this.Ok(res);
+            }
+
+            var session = SessionManager.I.GetSession(req.RoomId);
+            if (session != null)
+            {
+                if (session.TryGetUser(userIdentifier, out _) == ResultCode.Ok)
+                {
+                    res.ResultCode = ResultCode.AlreadyJoined;
+                    res.Message = "이미 해당 방에 접속해 있는 유저입니다.";
+                    return this.Ok(res);
+                }
+
+                if (roomInfo.PlayerCount <= session.GetUseCount())
+                {
+                    res.ResultCode = ResultCode.CannotJoinToFullRoom;
+                    res.Message = "인원이 꽉 찬 방에는 접근할 수 없습니다.";
+                    return this.Ok(res);
+                }
+            }
+
+            res.ResultCode = ResultCode.Ok;
+            res.Message = "해당 게임 방에 참가할 수 있는 유저입니다.";
+            return this.Ok(res);
+        }
+        finally
+        {
+            await transaction.DisposeAsync();
+        }
+
+        string ToKstString(DateTime dateTime)
+        {
+            var kst = dateTime.AddHours(9);
+            return $"{kst.Year:0000}-{kst.Month:00}-{kst.Day:00} {kst.Hour:00}:{kst.Minute:00}:{kst.Second:00}.{kst.Millisecond}";
+        }
+    }
 
     [HttpPost]
     [Route("loading")]

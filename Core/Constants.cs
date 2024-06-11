@@ -36,4 +36,9 @@ public static class Constants
     /// 랭킹 집계 마감이 완료된 세션의 초기화 후 재활용까지 보류할 시간입니다. (초 단위)
     /// </summary>
     public const int SessionDeferRecycleSeconds = 180;
+
+    /// <summary>
+    /// 게임 시작에 앞서 미리 loading API를 호출할 수 있는 시간입니다. (분 단위)
+    /// </summary>
+    public const int PreloadDurationMinutes = 1;
 }

@@ -96,6 +96,20 @@ public class GameSession
         }
     }
 
+    public int GetUseCount()
+    {
+        try
+        {
+            this.semaphoreSlim.Wait();
+
+            return this.activeUsers.Count;
+        }
+        finally
+        {
+            this.semaphoreSlim.Release();
+        }
+    }
+
     /// <summary>
     /// 플레이가 완료된 세션의 집계 마감 시간을 지정합니다
     /// </summary>
@@ -154,7 +168,13 @@ public class GameSession
                 }
             }
             // 그 외의 경우에는 진입 불가
-            else return ResultCode.UnhandledError;
+            else
+            {
+                if (this.GameStartAt <= DateTime.Now)
+                    return ResultCode.CannotJoinToStartedGame;
+                
+                return ResultCode.UnhandledError;
+            }
             
             user.SetSession(this);
             user.HasQuit = false;
@@ -175,6 +195,8 @@ public class GameSession
             if (now < this.CreatedAt) return false;
             // 이미 게임이 시작된 방에는 입장 불가
             if (this.GameStartAt <= now) return false;
+            // 너무 이른 시간에는 입장 불가
+            if (now <= this.GameStartAt.AddMinutes(-Constants.PreloadDurationMinutes)) return false;
 
             return this.activeUsers.Count < this.roomInfo.PlayerCount;
         }
