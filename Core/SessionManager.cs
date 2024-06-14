@@ -73,7 +73,7 @@ public class SessionManager
         {
             this.semaphoreSlim.Wait();
 
-            var gameUser = dbContext.GameUsers.SingleOrDefault(u =>
+            var gameUser = dbContext.GameUsers.LastOrDefault(u =>
                 u.UserId == identifier.UserId
                 && (u.Status == PlayStatus.Playing
                     || u.Status == PlayStatus.Done));
