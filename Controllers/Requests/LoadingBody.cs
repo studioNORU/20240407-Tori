@@ -10,4 +10,7 @@ public record struct LoadingBody
     
     [SwaggerSchema("플레이할 방 ID", Nullable = false)]
     public int RoomId { get; init; }
+    
+    [SwaggerSchema("클라이언트 앱 버전", Nullable = false)]
+    public string ClientVersion { get; init; }
 }

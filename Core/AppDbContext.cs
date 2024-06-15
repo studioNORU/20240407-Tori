@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<GameStage> GameStages { get; set; } = default!;
     public DbSet<GameUser> GameUsers { get; set; } = default!;
     public DbSet<GamePlayData> PlayData { get; set; } = default!;
+    public DbSet<GameLog> Logs { get; set; } = default!;
     
 #if DEBUG || DEV
     public DbSet<TestRoom> TestRooms { get; set; } = default!;
