@@ -73,10 +73,12 @@ public class SessionManager
         {
             this.semaphoreSlim.Wait();
 
-            var gameUser = dbContext.GameUsers.LastOrDefault(u =>
-                u.UserId == identifier.UserId
-                && (u.Status == PlayStatus.Playing
-                    || u.Status == PlayStatus.Done));
+            var gameUser = dbContext.GameUsers
+                .OrderBy(u => u.JoinedAt)
+                .LastOrDefault(u =>
+                    u.UserId == identifier.UserId
+                    && (u.Status == PlayStatus.Playing
+                        || u.Status == PlayStatus.Done));
 
             if (gameUser == null || !this.sessions.TryGetValue(gameUser.RoomId, out var session)) return null;
             
