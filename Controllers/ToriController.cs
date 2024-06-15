@@ -811,6 +811,12 @@ public class ToriController : Controller
     public async Task<IActionResult> PlayData([FromBody] PlayDataBody req)
     {
         this.logger.LogInformation("[POST] /tori/play-data - [body : {json}]", JsonSerializer.Serialize(req));
+
+        string? userId = null;
+        int? roomId = null;
+        var message = string.Empty;
+        object? dataObject = req;
+        
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
@@ -823,19 +829,31 @@ public class ToriController : Controller
 
                 case ResultCode.InvalidParameter:
                     await transaction.RollbackAsync();
+                    message = "정상적인 토큰이 아닙니다.";
                     return this.Unauthorized();
                 case ResultCode.SessionNotFound:
                 case ResultCode.NotJoinedUser:
                     await transaction.RollbackAsync();
+                    message = "해당 토큰을 통해 유저의 접속 정보를 확인하지 못했습니다.";
                     return this.Conflict();
                 case ResultCode.UnhandledError:
                 default:
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
+            userId = user?.Identifier.Id;
+            roomId = user?.PlaySession?.RoomId;
+
             if (user?.PlaySession == null || !user.HasJoined || user.HasLeft)
             {
                 await transaction.RollbackAsync();
+                message = "유저의 게임 참가 정보가 비정상적입니다.";
+                dataObject = new
+                {
+                    user?.PlaySession?.RoomId,
+                    user?.HasJoined,
+                    user?.HasLeft,
+                };
                 return this.Conflict();
             }
 
@@ -849,6 +867,11 @@ public class ToriController : Controller
             if (gameUser.Status != PlayStatus.Playing)
             {
                 await transaction.RollbackAsync();
+                message = "해당 유저가 플레이 상태가 아닙니다.";
+                dataObject = new
+                {
+                    Status = gameUser.Status.ToString(),
+                };
                 return this.Conflict();
             }
 
@@ -859,14 +882,16 @@ public class ToriController : Controller
                 .ToDictionary(it => int.Parse(it.Key), it => it.Value));
             if (gameUser.PlayData == null)
             {
-                await this.dbContext.PlayData.AddAsync(new GamePlayData
+                var playData = new GamePlayData
                 {
                     RoomId = user.PlaySession.RoomId,
                     UserId = user.UserId,
                     UseItems = useItemsJson,
                     TimeStamp = now,
                     GameUser = gameUser,
-                });
+                };
+                dataObject = playData;
+                await this.dbContext.PlayData.AddAsync(playData);
             }
             else
             {
@@ -875,22 +900,27 @@ public class ToriController : Controller
                 playData.TimeStamp = now;
                 playData.GameUser = gameUser;
                 this.dbContext.PlayData.Update(playData);
+                dataObject = playData;
             }
             
             await this.dbContext.SaveChangesAsync();
 
             await transaction.CommitAsync();
 
+            message = "플레이 정보 갱신에 성공했습니다.";
+
             return this.Ok();
         }
         catch (Exception e)
         {
+            message = e.Message;
             return await this.HandleExceptionAsync(transaction, e, "API HAS EXCEPTION - play-data [token : {token}]",
                 req.Token);
         }
         finally
         {
             await transaction.DisposeAsync();
+            await this.WriteLog(LogType.PlayData, userId, roomId, req.ClientVersion, message, dataObject);
         }
     }
 
@@ -903,12 +933,18 @@ public class ToriController : Controller
     public async Task<IActionResult> Status([FromBody] StatusBody req)
     {
         this.logger.LogInformation("[POST] /tori/status - [body : {json}]", JsonSerializer.Serialize(req));
+
+        int? roomId = null;
+        var message = string.Empty;
+        object? dataObject = req;
+        
         var transaction = await this.dbContext.Database.BeginTransactionAsync();
         try
         {
             if (!int.TryParse(req.UserId, out var userId))
             {
                 await transaction.RollbackAsync();
+                message = "유저 ID는 정수형 값을 사용해야 합니다.";
                 return this.BadRequest();
             }
 
@@ -921,29 +957,46 @@ public class ToriController : Controller
             if (gameUser == null)
             {
                 await transaction.RollbackAsync();
+                message = "DB로부터 GameUser 정보를 조회하지 못했습니다.";
+                dataObject = new
+                {
+                    userId,
+                };
                 return this.Conflict();
             }
+
+            roomId = gameUser.RoomId;
 
             var user = SessionManager.I.TryGetUser(gameUser.UserId, gameUser.RoomId);
             if (user == null)
             {
                 await transaction.RollbackAsync();
+                message = "유저 정보를 찾지 못했습니다.";
                 return this.Conflict();
             }
 
             await this.dataFetcher.UpdateUserStatus(user, gameUser.PlayData!.SpentItems, gameUser.PlayData!.TimeStamp);
             await transaction.CommitAsync();
+
+            message = "유저 상태 갱신에 성공했습니다.";
+            dataObject = new
+            {
+                gameUser.PlayData.SpentItems,
+                gameUser.PlayData.TimeStamp,
+            };
             
             return this.Ok();
         }
         catch (Exception e)
         {
+            message = e.Message;
             return await this.HandleExceptionAsync(transaction, e, "API HAS EXCEPTION - status [userId : {userId}]",
                 req.UserId);
         }
         finally
         {
             await transaction.DisposeAsync();
+            await this.WriteLog(LogType.Status, req.UserId, roomId, req.ClientVersion, message, dataObject);
         }
     }
     
@@ -957,18 +1010,21 @@ public class ToriController : Controller
     public async Task<IActionResult> Ranking([FromBody] PlayInfoBody req)
     {
         this.logger.LogInformation("[POST] /tori/ranking - [body : {json}]", JsonSerializer.Serialize(req));
+
+        string? userId = null;
+        int? roomId = null;
+        var message = string.Empty;
+        object? dataObject = req;
+
         try
         {
-            if (req.HostTime < 0) return this.BadRequest();
-            if (req.ItemCount < 0) return this.BadRequest();
-            
             var (resultCode, user) = await ValidateToken(req.Token);
 
             switch (resultCode)
             {
                 case ResultCode.Ok:
                     break;
-            
+
                 case ResultCode.InvalidParameter:
                     return this.Unauthorized();
                 case ResultCode.SessionNotFound:
@@ -979,14 +1035,55 @@ public class ToriController : Controller
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
-            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft) return this.Conflict();
+            userId = user?.Identifier.Id;
+            roomId = user?.PlaySession?.RoomId;
+
+            if (user?.PlaySession == null || !user.HasJoined || user.HasLeft)
+            {
+                message = "유저의 게임 참가 정보가 비정상적입니다.";
+                dataObject = new
+                {
+                    user?.PlaySession?.RoomId,
+                    user?.HasJoined,
+                    user?.HasLeft,
+                };
+                return this.Conflict();
+            }
+
+            if (req.HostTime < 0)
+            {
+                message = "호스트 시간은 음수일 수 없습니다.";
+                return this.BadRequest();
+            }
+
+            if (req.ItemCount < 0)
+            {
+                message = "아이템 사용 횟수는 음수일 수 없습니다.";
+                return this.BadRequest();
+            }
 
             // 게임 플레이 시간보다 쿠폰 소지 시간이 더 길 수는 없습니다
             var now = DateTime.UtcNow;
             if ((now - user.PlaySession.GameStartAt).TotalSeconds < req.HostTime)
+            {
+                message = "게임 플레이 시간보다 호스트 시간이 더 길 수 없습니다.";
+                dataObject = new
+                {
+                    user.PlaySession.GameStartAt,
+                    now,
+                    req.HostTime,
+                };
                 return this.BadRequest();
-            
+            }
+
             var (first, mine) = user.PlaySession.UpdateRanking(user.Identifier, req.HostTime, req.ItemCount);
+
+            message = "랭킹 정보 업데이트에 성공했습니다.";
+            dataObject = new
+            {
+                first,
+                mine,
+            };
 
             return this.Json(new RankingResponse
             {
@@ -1009,9 +1106,14 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
+            message = e.Message;
             return await this.HandleExceptionAsync(null, e,
                 "API HAS EXCEPTION - ranking [token : {token}, hostTime : {hostTime}, itemCount : {itemCount}]",
                 req.Token, req.HostTime, req.ItemCount);
+        }
+        finally
+        {
+            await this.WriteLog(LogType.Ranking, userId, roomId, req.ClientVersion, message, dataObject);
         }
     }
     
@@ -1025,6 +1127,12 @@ public class ToriController : Controller
     public async Task<IActionResult> Result([FromBody] AuthBody req)
     {
         this.logger.LogInformation("[POST] /tori/result - [body : {json}]", JsonSerializer.Serialize(req));
+
+        string? userId = null;
+        int? roomId = null;
+        var message = string.Empty;
+        object? dataObject = req;
+
         try
         {
             var (resultCode, user) = await ValidateToken(req.Token);
@@ -1033,10 +1141,12 @@ public class ToriController : Controller
             {
                 case ResultCode.Ok:
                     break;
-            
+
                 case ResultCode.InvalidParameter:
+                    message = "정상적인 토큰이 아닙니다.";
                     return this.Unauthorized();
                 case ResultCode.SessionNotFound:
+                    message = "해당 토큰으로 유저의 접속 정보를 확인할 수 없습니다.";
                     return this.Conflict();
                 case ResultCode.NotJoinedUser:
                     // 이미 gameend를 호출했으니 이 경우에는 정상
@@ -1046,14 +1156,45 @@ public class ToriController : Controller
                     throw new InvalidOperationException(resultCode.ToString());
             }
 
-            if (user?.PlaySession == null || !user.HasJoined || user.HasQuit) return this.Conflict();
-            
+            userId = user?.Identifier.Id;
+            roomId = user?.PlaySession?.RoomId;
+
+            if (user?.PlaySession == null || !user.HasJoined || user.HasQuit)
+            {
+                message = "유저의 게임 참가 정보가 비정상적입니다.";
+                dataObject = new
+                {
+                    user?.PlaySession?.RoomId,
+                    user?.HasJoined,
+                    user?.HasLeft,
+                };
+                return this.Conflict();
+            }
+
             var now = DateTime.UtcNow;
             if (user.PlaySession.CloseAt == null || now < user.PlaySession.CloseAt)
+            {
+                message = "아직 랭킹 집계가 완료되지 않았습니다.";
+                dataObject = new
+                {
+                    user.PlaySession.CloseAt,
+                    now,
+                };
                 return this.StatusCode(StatusCodes.Status408RequestTimeout);
-            
+            }
+
             resultCode = user.PlaySession.TryGetRanking(user.Identifier, out var first, out var mine);
-            if (resultCode != ResultCode.Ok) return this.Conflict();
+            if (resultCode != ResultCode.Ok)
+            {
+                message = "최종 랭킹 조회에 실패했습니다.";
+                return this.Conflict();
+            }
+
+            dataObject = new
+            {
+                first,
+                mine,
+            };
 
             return this.Json(new RankingResponse
             {
@@ -1076,7 +1217,12 @@ public class ToriController : Controller
         }
         catch (Exception e)
         {
+            message = e.Message;
             return await this.HandleExceptionAsync(null, e, "API HAS EXCEPTION - result [token : {token}", req.Token);
+        }
+        finally
+        {
+            await this.WriteLog(LogType.Result, userId, roomId, req.ClientVersion, message, dataObject);
         }
     }
 }
