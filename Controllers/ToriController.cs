@@ -358,6 +358,8 @@ public class ToriController : Controller
 
             this.logger.LogDebug("loading [userId : {userId}, roomId : {roomId}, startAt : {startAt}, endAt : {endAt}]",
                 user.UserId, session.RoomId, session.GameStartAt.ToLocalTime(), session.GameEndAt.ToLocalTime());
+
+            message = "로딩에 성공했습니다.";
             dataObject = new
             {
                 session.GameStartAt,
@@ -890,7 +892,13 @@ public class ToriController : Controller
                     TimeStamp = now,
                     GameUser = gameUser,
                 };
-                dataObject = playData;
+                dataObject = new
+                {
+                    playData.RoomId,
+                    playData.UserId,
+                    playData.UseItems,
+                    playData.TimeStamp,
+                };
                 await this.dbContext.PlayData.AddAsync(playData);
             }
             else
@@ -900,7 +908,13 @@ public class ToriController : Controller
                 playData.TimeStamp = now;
                 playData.GameUser = gameUser;
                 this.dbContext.PlayData.Update(playData);
-                dataObject = playData;
+                dataObject = new
+                {
+                    playData.RoomId,
+                    playData.UserId,
+                    playData.UseItems,
+                    playData.TimeStamp,
+                };
             }
             
             await this.dbContext.SaveChangesAsync();
@@ -1190,6 +1204,7 @@ public class ToriController : Controller
                 return this.Conflict();
             }
 
+            message = "최종 랭킹 조회에 성공했습니다.";
             dataObject = new
             {
                 first,
