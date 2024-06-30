@@ -34,7 +34,6 @@ public class PostGameResultService : BackgroundService
                 else this.logger.LogInformation("There's no finished game session");
                 
                 await transaction.CommitAsync(stoppingToken);
-                await Task.Delay(this.interval, stoppingToken);
             }
             catch (Exception e)
             {
@@ -44,6 +43,7 @@ public class PostGameResultService : BackgroundService
             finally
             {
                 await transaction.DisposeAsync();
+                await Task.Delay(this.interval, stoppingToken);
             }
         }
     }
